@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { requireOrg, can } from '@/lib/auth/context';
+import { requireOrgPage, can } from '@/lib/auth/context';
 import { changeMemberRole, listMembers, removeMember } from '@/modules/memberships/actions';
 import { inviteMember, listInvitations, revokeInvitation } from '@/modules/invitations/actions';
 import { startImpersonation } from '@/modules/impersonation/actions';
@@ -9,7 +9,7 @@ import { Flash, PageHead, Pill, day } from '@/components/ui';
 
 export default async function Team({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams: Promise<{ msg?: string; err?: string }> }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
-  const ctx = await requireOrg(orgSlug);
+  const ctx = await requireOrgPage(orgSlug);
   const path = `/w/${orgSlug}/team`;
   const [members, invites, roles] = await Promise.all([
     listMembers({ orgSlug }),

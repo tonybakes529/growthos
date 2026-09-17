@@ -4,6 +4,7 @@ export const TRIGGER_TYPES = [
   'enrollment.created', 'lesson.completed', 'program.completed', 'assignment.submitted', 'assignment.reviewed',
   'kpi.submitted', 'kpi.missed', 'task.created', 'task.overdue', 'task.completed', 'call.completed',
   'goal.achieved', 'payment.succeeded', 'payment.failed', 'subscription.canceled', 'questionnaire.submitted',
+  'customer.invited', 'customer.registered', 'customer.onboarding_started', 'customer.onboarding_completed',
 ] as const;
 export type TriggerType = (typeof TRIGGER_TYPES)[number];
 

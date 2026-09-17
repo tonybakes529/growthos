@@ -1,4 +1,4 @@
-import { requireOrg, can } from '@/lib/auth/context';
+import { requireOrgPage, can } from '@/lib/auth/context';
 import { getWeeklyScorecard, submitWeeklyScorecard } from '@/modules/kpis/actions';
 import { done } from '@/components/flash';
 import { Flash, PageHead, Pill, day } from '@/components/ui';
@@ -7,7 +7,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export default async function Scorecard({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams: Promise<{ week?: string; msg?: string; err?: string }> }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
-  const ctx = await requireOrg(orgSlug);
+  const ctx = await requireOrgPage(orgSlug);
   const path = `/w/${orgSlug}/scorecard`;
   const cards = (await ctx.sb.from('scorecards').select('id, name').eq('organization_id', ctx.organizationId).is('deleted_at', null).limit(1)).data ?? [];
   const card = cards[0];

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireOrg, can } from '@/lib/auth/context';
+import { requireOrgPage, can } from '@/lib/auth/context';
 import { getLesson, upsertLessonBlock } from '@/modules/programs/actions';
 import { completeLesson } from '@/modules/enrollments/actions';
 import { getQuiz, submitAssignment, submitQuizAttempt } from '@/modules/assignments/actions';
@@ -10,7 +10,7 @@ type Option = { id: string; label: string };
 
 export default async function LessonPage({ params, searchParams }: { params: Promise<{ orgSlug: string; lessonId: string }>; searchParams: Promise<{ msg?: string; err?: string }> }) {
   const [{ orgSlug, lessonId }, sp] = await Promise.all([params, searchParams]);
-  const ctx = await requireOrg(orgSlug);
+  const ctx = await requireOrgPage(orgSlug);
   const path = `/w/${orgSlug}/lessons/${lessonId}`;
   const res = await getLesson({ lessonId });
   if (!res.ok) return <Flash err={res.error.message} />;

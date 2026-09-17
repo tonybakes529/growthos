@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 type Ws = { slug: string; name: string; kind: string };
+export type NavItem = { href: string; label: string; exact?: boolean };
 
-export function SideNav({ email, roleLabel, isStaff, workspaces, currentSlug }: {
-  email: string; roleLabel: string; isStaff: boolean; workspaces: Ws[]; currentSlug?: string;
+export function SideNav({ email, roleLabel, isStaff, workspaces, currentSlug, items }: {
+  email: string; roleLabel: string; isStaff: boolean; workspaces: Ws[]; currentSlug?: string; items: NavItem[];
 }) {
   const path = usePathname();
   const current = workspaces.find((w) => w.slug === currentSlug);
@@ -22,12 +23,7 @@ export function SideNav({ email, roleLabel, isStaff, workspaces, currentSlug }: 
       {current && (
         <>
           <div className="label">{current.name}</div>
-          {link(`/w/${current.slug}`, 'Home', true)}
-          {link(`/w/${current.slug}/programs`, 'Programs')}
-          {link(`/w/${current.slug}/scorecard`, 'Weekly Scorecard')}
-          {link(`/w/${current.slug}/tasks`, 'Tasks')}
-          {link(`/w/${current.slug}/pipeline`, 'Sales Pipeline')}
-          {link(`/w/${current.slug}/team`, 'Team')}
+          {items.map((i) => link(i.href, i.label, i.exact))}
         </>
       )}
       {clients.length > 0 && (

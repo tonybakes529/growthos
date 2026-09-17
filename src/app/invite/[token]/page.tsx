@@ -8,6 +8,7 @@ export default async function Invite({ params, searchParams }: { params: Promise
   const [{ token }, { err }] = await Promise.all([params, searchParams]);
   const [preview, session] = await Promise.all([getInvitationPreview({ token }), getSession()]);
   const inv = preview.ok ? preview.data : null;
+  if (inv?.is_customer) redirect(`/join/${inv.organization_slug}/${token}`);
 
   async function accept() {
     'use server';

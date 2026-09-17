@@ -268,6 +268,18 @@ export type Database = {
         Update: { id?: string; organization_id?: string; entity_type?: string; key?: string; label?: string; field_type?: string; options?: Json; is_required?: boolean; position?: number; is_archived?: boolean; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
         Relationships: [];
       };
+      customer_onboarding_answers: {
+        Row: { id: string; organization_id: string; onboarding_id: string; question_id: string; value: Json; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null };
+        Insert: { id?: string; organization_id: string; onboarding_id: string; question_id: string; value: Json; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
+        Update: { id?: string; organization_id?: string; onboarding_id?: string; question_id?: string; value?: Json; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
+        Relationships: [];
+      };
+      customer_onboardings: {
+        Row: { id: string; organization_id: string; program_id: string; form_id: string | null; contact_id: string | null; email: string; user_id: string | null; invitation_id: string | null; purchase_id: string | null; status: string; invited_at: string; registered_at: string | null; started_at: string | null; completed_at: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null };
+        Insert: { id?: string; organization_id: string; program_id: string; form_id?: string | null; contact_id?: string | null; email: string; user_id?: string | null; invitation_id?: string | null; purchase_id?: string | null; status?: string; invited_at?: string; registered_at?: string | null; started_at?: string | null; completed_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
+        Update: { id?: string; organization_id?: string; program_id?: string; form_id?: string | null; contact_id?: string | null; email?: string; user_id?: string | null; invitation_id?: string | null; purchase_id?: string | null; status?: string; invited_at?: string; registered_at?: string | null; started_at?: string | null; completed_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
+        Relationships: [];
+      };
       dashboard_templates: {
         Row: { id: string; name: string; description: string | null; category: string | null; source_dashboard_id: string; is_active: boolean; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null };
         Insert: { id?: string; name: string; description?: string | null; category?: string | null; source_dashboard_id: string; is_active?: boolean; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
@@ -544,6 +556,18 @@ export type Database = {
         Update: { id?: string; organization_id?: string; name?: string; slug?: string; description?: string | null; offer_type?: string; status?: string; current_version_id?: string | null; stripe_product_id?: string | null; source_template_id?: string | null; copied_from_id?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
         Relationships: [];
       };
+      onboarding_form_questions: {
+        Row: { id: string; organization_id: string; form_id: string; key: string; label: string; help_text: string | null; question_type: string; options: Json; is_required: boolean; position: number; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null };
+        Insert: { id?: string; organization_id: string; form_id: string; key: string; label: string; help_text?: string | null; question_type: string; options?: Json; is_required?: boolean; position?: number; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Update: { id?: string; organization_id?: string; form_id?: string; key?: string; label?: string; help_text?: string | null; question_type?: string; options?: Json; is_required?: boolean; position?: number; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Relationships: [];
+      };
+      onboarding_forms: {
+        Row: { id: string; organization_id: string; name: string; description: string | null; welcome_heading: string | null; welcome_message: string | null; completion_message: string | null; status: string; published_at: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null };
+        Insert: { id?: string; organization_id: string; name: string; description?: string | null; welcome_heading?: string | null; welcome_message?: string | null; completion_message?: string | null; status?: string; published_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Update: { id?: string; organization_id?: string; name?: string; description?: string | null; welcome_heading?: string | null; welcome_message?: string | null; completion_message?: string | null; status?: string; published_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Relationships: [];
+      };
       onboarding_questionnaires: {
         Row: { id: string; name: string; description: string | null; is_active: boolean; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null };
         Insert: { id?: string; name: string; description?: string | null; is_active?: boolean; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
@@ -653,9 +677,9 @@ export type Database = {
         Relationships: [];
       };
       programs: {
-        Row: { id: string; organization_id: string; title: string; slug: string; subtitle: string | null; description: string | null; cover_file_id: string | null; status: string; visibility: string; is_sequential: boolean; default_access_days: number | null; certificate_enabled: boolean; certificate_settings: Json; community_enabled: boolean; estimated_hours: number | null; published_at: string | null; source_template_id: string | null; copied_from_id: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null };
-        Insert: { id?: string; organization_id: string; title: string; slug: string; subtitle?: string | null; description?: string | null; cover_file_id?: string | null; status?: string; visibility?: string; is_sequential?: boolean; default_access_days?: number | null; certificate_enabled?: boolean; certificate_settings?: Json; community_enabled?: boolean; estimated_hours?: number | null; published_at?: string | null; source_template_id?: string | null; copied_from_id?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
-        Update: { id?: string; organization_id?: string; title?: string; slug?: string; subtitle?: string | null; description?: string | null; cover_file_id?: string | null; status?: string; visibility?: string; is_sequential?: boolean; default_access_days?: number | null; certificate_enabled?: boolean; certificate_settings?: Json; community_enabled?: boolean; estimated_hours?: number | null; published_at?: string | null; source_template_id?: string | null; copied_from_id?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Row: { id: string; organization_id: string; title: string; slug: string; subtitle: string | null; description: string | null; cover_file_id: string | null; status: string; visibility: string; is_sequential: boolean; default_access_days: number | null; certificate_enabled: boolean; certificate_settings: Json; community_enabled: boolean; estimated_hours: number | null; published_at: string | null; source_template_id: string | null; copied_from_id: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null; onboarding_form_id: string | null; external_product_id: string | null };
+        Insert: { id?: string; organization_id: string; title: string; slug: string; subtitle?: string | null; description?: string | null; cover_file_id?: string | null; status?: string; visibility?: string; is_sequential?: boolean; default_access_days?: number | null; certificate_enabled?: boolean; certificate_settings?: Json; community_enabled?: boolean; estimated_hours?: number | null; published_at?: string | null; source_template_id?: string | null; copied_from_id?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null; onboarding_form_id?: string | null; external_product_id?: string | null };
+        Update: { id?: string; organization_id?: string; title?: string; slug?: string; subtitle?: string | null; description?: string | null; cover_file_id?: string | null; status?: string; visibility?: string; is_sequential?: boolean; default_access_days?: number | null; certificate_enabled?: boolean; certificate_settings?: Json; community_enabled?: boolean; estimated_hours?: number | null; published_at?: string | null; source_template_id?: string | null; copied_from_id?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null; onboarding_form_id?: string | null; external_product_id?: string | null };
         Relationships: [];
       };
       published_links: {
@@ -946,6 +970,7 @@ export type Database = {
     Views: { [_ in never]: never };
     Functions: {
       accept_invitation: { Args: { p_token: string }; Returns: string };
+      add_customer: { Args: { p_organization_id: string; p_program_id: string; p_email: string; p_first_name?: string; p_last_name?: string }; Returns: Json };
       apply_template: { Args: { p_template_type: string; p_template_id: string; p_organization_id: string; p_options?: Json }; Returns: string };
       apply_templates_bulk: { Args: { p_items: Json; p_organization_ids: string[] }; Returns: number };
       assign_task: { Args: { p_task_id: string; p_user_ids: string[]; p_replace?: boolean }; Returns: undefined };
@@ -963,9 +988,11 @@ export type Database = {
       enroll_user: { Args: { p_organization_id: string; p_program_id: string; p_user_id: string; p_source?: string; p_access_days?: number }; Returns: string };
       fulfill_purchase: { Args: { p_organization_id: string; p_offer_id: string; p_pricing_option_id: string; p_email: string; p_amount_paid_cents: number; p_checkout_session: string; p_payment_intent?: string; p_stripe_customer?: string; p_stripe_subscription?: string; p_coupon_code?: string; p_first_name?: string; p_last_name?: string; p_metadata?: Json }; Returns: Json };
       get_invitation: { Args: { p_token: string }; Returns: Json };
+      get_my_onboarding: { Args: { p_slug: string }; Returns: Json };
       get_my_workspaces: { Args: Record<PropertyKey, never>; Returns: { organization_id: string | null; name: string | null; slug: string | null; kind: string | null; status: string | null; access_type: string | null; role_key: string | null }[] };
       get_onboarding_questionnaire: { Args: { p_organization_id: string }; Returns: Json };
       get_org_context: { Args: { p_slug: string }; Returns: Json };
+      get_pending_onboarding: { Args: Record<PropertyKey, never>; Returns: Json };
       get_program_outline: { Args: { p_program_id: string }; Returns: { section_id: string | null; section_title: string | null; section_position: number | null; module_id: string | null; module_title: string | null; module_position: number | null; lesson_id: string | null; lesson_title: string | null; lesson_position: number | null; estimated_minutes: number | null; is_available: boolean | null; unlocks_at: string | null; lock_reason: string | null; progress_status: string | null; completed_at: string | null }[] };
       get_session_context: { Args: Record<PropertyKey, never>; Returns: Json };
       invite_member: { Args: { p_organization_id: string; p_email: string; p_role_key: string; p_program_ids?: string[]; p_message?: string }; Returns: Json };
@@ -981,6 +1008,7 @@ export type Database = {
       review_submission: { Args: { p_submission_id: string; p_status: string; p_feedback?: string; p_grade?: number }; Returns: undefined };
       revoke_enrollment: { Args: { p_enrollment_id: string }; Returns: undefined };
       revoke_invitation: { Args: { p_invitation_id: string }; Returns: undefined };
+      save_onboarding_answers: { Args: { p_onboarding_id: string; p_answers: Json; p_submit?: boolean }; Returns: Json };
       set_organization_status: { Args: { p_organization_id: string; p_status: string; p_reason?: string }; Returns: undefined };
       set_permission_override: { Args: { p_organization_id: string; p_user_id: string; p_permission_key: string; p_effect: string; p_reason?: string; p_expires_at?: string }; Returns: undefined };
       set_task_status: { Args: { p_task_id: string; p_status: string }; Returns: undefined };

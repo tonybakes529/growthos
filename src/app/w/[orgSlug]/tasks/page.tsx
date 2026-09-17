@@ -1,4 +1,4 @@
-import { requireOrg, can } from '@/lib/auth/context';
+import { requireOrgPage, can } from '@/lib/auth/context';
 import { createTask, listTasks, setTaskStatus } from '@/modules/tasks/actions';
 import { listMembers } from '@/modules/memberships/actions';
 import { done } from '@/components/flash';
@@ -8,7 +8,7 @@ const STATUSES = ['todo', 'in_progress', 'blocked', 'in_review', 'done', 'cancel
 
 export default async function Tasks({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams: Promise<{ view?: string; msg?: string; err?: string }> }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
-  const ctx = await requireOrg(orgSlug);
+  const ctx = await requireOrgPage(orgSlug);
   const path = `/w/${orgSlug}/tasks`;
   const view = sp.view ?? 'open';
   const [tasks, members] = await Promise.all([

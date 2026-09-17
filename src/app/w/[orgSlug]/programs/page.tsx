@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireOrg, can } from '@/lib/auth/context';
+import { requireOrgPage, can } from '@/lib/auth/context';
 import { createProgram, listPrograms } from '@/modules/programs/actions';
 import { listMyEnrollments } from '@/modules/enrollments/actions';
 import { done } from '@/components/flash';
@@ -7,19 +7,19 @@ import { Bar, Flash, PageHead, Pill } from '@/components/ui';
 
 export default async function Programs({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams: Promise<{ msg?: string; err?: string }> }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
-  const ctx = await requireOrg(orgSlug);
+  const ctx = await requireOrgPage(orgSlug);
   const path = `/w/${orgSlug}/programs`;
   const [programs, mine] = await Promise.all([listPrograms({ orgSlug }), listMyEnrollments({ orgSlug })]);
   const progress = new Map(mine.ok ? mine.data.map((e) => [e.program_id, e]) : []);
 
   async function create(form: FormData) {
     'use server';
-    done(path, await createProgram({ orgSlug, title: String(form.get('title')), description: String(form.get('description') || '') || undefined }), 'Program created');
+    done(path, await createProgram({ orgSlug, title: String(form.get('title')), description: String(form.get('description') || '') || undefined }), 'Course created');
   }
 
   return (
     <>
-      <PageHead sub={ctx.name} title="Programs" />
+      <PageHead sub={ctx.name} title="Courses" />
       <Flash msg={sp.msg} err={sp.err ?? (programs.ok ? undefined : programs.error.message)} />
       <div className="grid g3">
         {(programs.ok ? programs.data : []).map((p) => {
@@ -35,9 +35,9 @@ export default async function Programs({ params, searchParams }: { params: Promi
       </div>
       {can(ctx, 'programs.create') && (
         <form className="card" action={create} style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
-          <label className="f">New program title<input name="title" required /></label>
+          <label className="f">New course name<input name="title" required /></label>
           <label className="f" style={{ flex: 1 }}>Description<input name="description" /></label>
-          <button className="btn" type="submit">Create program</button>
+          <button className="btn" type="submit">Create course</button>
         </form>
       )}
     </>

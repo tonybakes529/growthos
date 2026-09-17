@@ -1,4 +1,4 @@
-import { requireOrg, can } from '@/lib/auth/context';
+import { requireOrgPage, can } from '@/lib/auth/context';
 import { createOpportunity, moveOpportunity } from '@/modules/sales/actions';
 import { getGrowthMetrics } from '@/modules/reports/actions';
 import { done } from '@/components/flash';
@@ -6,7 +6,7 @@ import { Flash, PageHead, Stat, money } from '@/components/ui';
 
 export default async function Pipeline({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams: Promise<{ msg?: string; err?: string }> }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
-  const ctx = await requireOrg(orgSlug);
+  const ctx = await requireOrgPage(orgSlug);
   const path = `/w/${orgSlug}/pipeline`;
   const org = ctx.organizationId;
   if (!can(ctx, 'sales.read')) return (<><PageHead sub={ctx.name} title="Sales Pipeline" /><div className="card muted">You don't have access to sales.</div></>);

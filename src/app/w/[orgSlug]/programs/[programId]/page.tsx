@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import { requireOrg, can } from '@/lib/auth/context';
+import { requireOrgPage, can } from '@/lib/auth/context';
 import { unwrap } from '@/lib/errors';
-import { createLesson, createModule, createSection, getProgramOutline, setProgramStatus } from '@/modules/programs/actions';
+import { createLesson, createModule, createSection, getProgramOutline, setProgramStatus, updateProgram } from '@/modules/programs/actions';
 import { completeLesson, enrollUser, getProgressReport } from '@/modules/enrollments/actions';
 import { listMembers } from '@/modules/memberships/actions';
+import { setCourseOnboarding } from '@/modules/onboarding-forms/actions';
 import { done } from '@/components/flash';
 import { Bar, Flash, PageHead, Pill, day } from '@/components/ui';
 
@@ -14,15 +15,24 @@ const LOCK: Record<string, string> = {
 
 export default async function ProgramPage({ params, searchParams }: { params: Promise<{ orgSlug: string; programId: string }>; searchParams: Promise<{ msg?: string; err?: string }> }) {
   const [{ orgSlug, programId }, sp] = await Promise.all([params, searchParams]);
-  const ctx = await requireOrg(orgSlug);
+  const ctx = await requireOrgPage(orgSlug);
   const path = `/w/${orgSlug}/programs/${programId}`;
   const builder = can(ctx, 'programs.update');
-  const program = unwrap(await ctx.sb.from('programs').select('id, title, subtitle, description, status').eq('id', programId).maybeSingle());
-  const [outline, report, members] = await Promise.all([
+  const program = unwrap(await ctx.sb.from('programs').select('id, title, subtitle, description, status, onboarding_form_id, external_product_id').eq('id', programId).maybeSingle());
+  const [outline, report, members, forms, customers, entitlements] = await Promise.all([
     getProgramOutline({ programId }),
     can(ctx, 'enrollments.read') ? getProgressReport({ orgSlug, programId }) : null,
     can(ctx, 'enrollments.create') ? listMembers({ orgSlug }) : null,
+    builder ? ctx.sb.from('onboarding_forms').select('id, name, status').eq('organization_id', ctx.organizationId).is('deleted_at', null).order('name') : null,
+    can(ctx, 'enrollments.read') ? ctx.sb.from('customer_onboardings').select('status').eq('program_id', programId).eq('organization_id', ctx.organizationId) : null,
+    builder && can(ctx, 'offers.read') ? ctx.sb.from('offer_entitlements').select('offer_id').eq('program_id', programId).eq('organization_id', ctx.organizationId) : null,
   ]);
+  // Stripe identifiers live on the offer that sells this course; shown here read-only so the link is visible
+  const offerIds = (entitlements?.data ?? []).map((e) => e.offer_id);
+  const [offers, prices] = offerIds.length ? await Promise.all([
+    ctx.sb.from('offers').select('id, name, stripe_product_id').in('id', offerIds),
+    ctx.sb.from('pricing_options').select('offer_id, stripe_price_id').in('offer_id', offerIds).not('stripe_price_id', 'is', null),
+  ]) : [null, null];
   const lessons = outline.ok ? outline.data.sections.flatMap((s) => s.modules.flatMap((m) => m.lessons)) : [];
   const doneCount = lessons.filter((l) => l.progress === 'completed').length;
   const pct = lessons.length ? Math.round((100 * doneCount) / lessons.length) : 0;
@@ -49,6 +59,13 @@ export default async function ProgramPage({ params, searchParams }: { params: Pr
       requiresPreviousCompletion: form.get('seq') === 'on',
       drip: days > 0 ? { type: 'days_after_enrollment', days } : { type: 'immediate' } }), 'Lesson added');
   }
+  async function settings(form: FormData) {
+    'use server';
+    const text = (k: string) => String(form.get(k) ?? '').trim();
+    const saved = await updateProgram({ orgSlug, programId, patch: { title: text('title'), description: text('description') || null } });
+    if (!saved.ok) done(path, saved, '');
+    done(path, await setCourseOnboarding({ orgSlug, programId, formId: text('form') || null, externalProductId: text('product') || null }), 'Course settings saved');
+  }
   async function publish(form: FormData) {
     'use server';
     done(path, await setProgramStatus({ orgSlug, programId, status: String(form.get('status')) as 'published' }), 'Program status updated');
@@ -64,8 +81,8 @@ export default async function ProgramPage({ params, searchParams }: { params: Pr
 
   return (
     <>
-      <p><Link href={`/w/${orgSlug}/programs`}>← Programs</Link></p>
-      <PageHead sub={`${ctx.name} · Programs`} title={program?.title ?? 'Program'}>
+      <p><Link href={`/w/${orgSlug}/programs`}>← Courses</Link></p>
+      <PageHead sub={`${ctx.name} · Courses`} title={program?.title ?? 'Course'}>
         {builder && program && (
           <form action={publish}>
             <input type="hidden" name="status" value={program.status === 'published' ? 'draft' : 'published'} />
@@ -132,6 +149,45 @@ export default async function ProgramPage({ params, searchParams }: { params: Pr
                 </form>
               )}
             </div>
+          )}
+
+          {customers?.data && (
+            <div className="card">
+              <h2>Customers ({customers.data.length})</h2>
+              <ul className="plain">
+                <li><span className="muted">Invited, no login yet</span><span>{customers.data.filter((c) => c.status === 'invited').length}</span></li>
+                <li><span className="muted">Onboarding not finished</span><span>{customers.data.filter((c) => c.status === 'registered' || c.status === 'in_progress').length}</span></li>
+                <li><span className="muted">Onboarding complete</span><span>{customers.data.filter((c) => c.status === 'completed').length}</span></li>
+              </ul>
+              <p style={{ marginBottom: 0 }}><Link href={`/w/${orgSlug}/customers?course=${programId}`}>View customers</Link></p>
+            </div>
+          )}
+
+          {builder && program && (
+            <form className="card" action={settings} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h2 style={{ margin: 0 }}>Course settings</h2>
+              <label className="f">Name<input name="title" required minLength={2} maxLength={160} defaultValue={program.title} /></label>
+              <label className="f">Description<textarea name="description" maxLength={5000} defaultValue={program.description ?? ''} /></label>
+              <label className="f">Onboarding form
+                <select name="form" defaultValue={program.onboarding_form_id ?? ''}>
+                  <option value="">None</option>
+                  {(forms?.data ?? []).filter((f) => f.status === 'published' || f.id === program.onboarding_form_id)
+                    .map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+                <span className="qhelp">New customers of this course fill this in right after creating their login. Only published forms are listed. <Link href={`/w/${orgSlug}/onboarding`}>Manage forms</Link></span>
+              </label>
+              <label className="f">Product ID <span className="muted" style={{ fontWeight: 400 }}>(optional)</span>
+                <input name="product" maxLength={200} defaultValue={program.external_product_id ?? ''} placeholder="The ID your checkout uses for this course" /></label>
+              {!!offers?.data?.length && (
+                <div className="muted" style={{ fontSize: 13 }}>
+                  Sold through {offers.data.map((o) => {
+                    const ids = [o.stripe_product_id, ...(prices?.data ?? []).filter((x) => x.offer_id === o.id).map((x) => x.stripe_price_id)].filter(Boolean);
+                    return `${o.name}${ids.length ? ` (Stripe: ${ids.join(', ')})` : ' (no Stripe IDs yet)'}`;
+                  }).join('; ')}
+                </div>
+              )}
+              <div><button className="btn" type="submit">Save settings</button></div>
+            </form>
           )}
 
           {builder && (
