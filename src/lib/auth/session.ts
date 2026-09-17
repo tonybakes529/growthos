@@ -23,10 +23,14 @@ export type Session = { sb: ServerClient; userId: string; email: string | undefi
 /** Returns null when signed out. Cached per request. */
 export const getSession = cache(async (): Promise<Session | null> => {
   const sb = await createClient();
-  const { data: { user } } = await sb.auth.getUser(); // verifies the JWT with Supabase Auth
-  if (!user) return null;
+  // Signature + expiry are verified locally against the project's JWKS (no Auth server round trip).
+  // Postgres re-verifies the same JWT on every query, and get_session_context() is the authority
+  // on who the caller is, so a forged or revoked-and-expired token never reaches any data.
+  const { data } = await sb.auth.getClaims();
+  const claims = data?.claims;
+  if (!claims?.sub) return null;
   const ctx = unwrap(await sb.schema('app').rpc('get_session_context')) as unknown as SessionContext;
-  return { sb, userId: user.id, email: user.email, ctx };
+  return { sb, userId: claims.sub, email: typeof claims.email === 'string' ? claims.email : undefined, ctx };
 });
 
 export async function requireSession(): Promise<Session> {

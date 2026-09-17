@@ -15,11 +15,14 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
   const res = await getLesson({ lessonId });
   if (!res.ok) return <Flash err={res.error.message} />;
   const { lesson, blocks, resources, assignments, quizzes, locked } = res.data;
-  const quizData = await Promise.all(quizzes.map((q) => getQuiz({ quizId: q.id })));
-  const mySubs = assignments.length
-    ? (await ctx.sb.from('assignment_submissions').select('assignment_id, status, submitted_at')
-        .in('assignment_id', assignments.map((a) => a.id)).eq('user_id', ctx.ctx.effective_user_id)).data ?? []
-    : [];
+  const [quizData, subRes] = await Promise.all([
+    Promise.all(quizzes.map((q) => getQuiz({ quizId: q.id }))),
+    assignments.length
+      ? ctx.sb.from('assignment_submissions').select('assignment_id, status, submitted_at')
+          .in('assignment_id', assignments.map((a) => a.id)).eq('user_id', ctx.ctx.effective_user_id)
+      : null,
+  ]);
+  const mySubs = subRes?.data ?? [];
 
   async function complete() {
     'use server';

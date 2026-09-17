@@ -19,7 +19,11 @@ export async function updateSession(request: NextRequest) {
       },
     },
   );
-  const { data: { user } } = await supabase.auth.getUser();
+  // getClaims() refreshes an expired session like getUser() does, but verifies the JWT locally
+  // against the project's cached JWKS instead of calling the Auth server on every request
+  // (middleware also runs for every <Link> prefetch, so that call dominated page latency).
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims.sub;
 
   const path = request.nextUrl.pathname;
   const isProtected = path.startsWith('/admin') || path.startsWith('/w/');

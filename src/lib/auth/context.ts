@@ -2,6 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { AppError, unwrap } from '@/lib/errors';
 import type { Permission } from '@/lib/permissions/keys';
+import { createClient } from '@/lib/supabase/server';
 import { requireSession, type Session } from './session';
 
 export type OrgContext = Session & {
@@ -29,8 +30,13 @@ type OrgContextRow = {
  * Never accept organization ids from the browser; accept slugs and call this.
  */
 export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
-  const session = await requireSession();
-  const row = unwrap(await session.sb.schema('app').rpc('get_org_context', { p_slug: slug })) as unknown as OrgContextRow;
+  // Both RPCs only need the caller's JWT, so run them together instead of back to back.
+  // requireSession() rejects first when signed out, so the org result is never read unauthenticated.
+  const [session, orgRes] = await Promise.all([
+    requireSession(),
+    createClient().then((sb) => sb.schema('app').rpc('get_org_context', { p_slug: slug })),
+  ]);
+  const row = unwrap(orgRes) as unknown as OrgContextRow;
   return {
     ...session,
     organizationId: row.organization_id,

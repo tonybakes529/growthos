@@ -29,12 +29,16 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
     getQuestionnaire({ orgSlug }),
   ]);
   const taskIds = (myTaskIds.data ?? []).map((t) => t.task_id);
-  const tasks = taskIds.length
-    ? (await ctx.sb.from('tasks').select('id, title, status, due_at').in('id', taskIds).is('deleted_at', null)
-        .not('status', 'in', '(done,canceled)').order('due_at', { nullsFirst: false }).limit(6)).data ?? []
-    : [];
   const progIds = (enrollments.data ?? []).map((e) => e.program_id);
-  const progs = progIds.length ? (await ctx.sb.from('programs').select('id, title').in('id', progIds)).data ?? [] : [];
+  const [taskRes, progRes] = await Promise.all([
+    taskIds.length
+      ? ctx.sb.from('tasks').select('id, title, status, due_at').in('id', taskIds).is('deleted_at', null)
+          .not('status', 'in', '(done,canceled)').order('due_at', { nullsFirst: false }).limit(6)
+      : null,
+    progIds.length ? ctx.sb.from('programs').select('id, title').in('id', progIds) : null,
+  ]);
+  const tasks = taskRes?.data ?? [];
+  const progs = progRes?.data ?? [];
   const questionnaire = q.ok ? q.data : null;
   const showQuestionnaire = questionnaire && !questionnaire.submitted_at && can(ctx, 'organization.update');
 

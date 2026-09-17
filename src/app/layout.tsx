@@ -1,9 +1,13 @@
 import type { ReactNode } from 'react';
+import { Public_Sans } from 'next/font/google';
 import './globals.css';
 import { getSession } from '@/lib/auth/session';
 import { endImpersonation } from '@/modules/impersonation/actions';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+
+// Self-hosted at build time: no render-blocking request to fonts.googleapis.com, no layout shift.
+const publicSans = Public_Sans({ subsets: ['latin'], weight: ['400', '600', '700'], display: 'swap', variable: '--font-sans' });
 
 export const metadata = { title: 'Growth OS' };
 
@@ -11,11 +15,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const session = await getSession().catch(() => null);
   const imp = session?.ctx.impersonation;
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&display=swap" />
-      </head>
+    <html lang="en" className={publicSans.variable}>
       <body>
         {imp && (
           <form className="banner" action={async () => { 'use server'; await endImpersonation({}); revalidatePath('/', 'layout'); redirect('/admin/clients'); }}>

@@ -4,7 +4,7 @@
   --red: #a8322a; --red-bg: #fbeceb; --amber: #8a5a00; --amber-bg: #fdf3dd; --green: #2e6b3a; --green-bg: #e8f3ea;
 }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: "Public Sans", system-ui, sans-serif; color: var(--ink); background: var(--bg); font-size: 14px; }
+body { margin: 0; font-family: var(--font-sans), system-ui, sans-serif; color: var(--ink); background: var(--bg); font-size: 14px; }
 a { color: var(--accent); } a:hover { color: var(--accent-2); }
 h1 { font-size: 26px; margin: 2px 0 0; } h2 { font-size: 16px; margin: 0 0 10px; } h3 { font-size: 14px; margin: 14px 0 6px; color: var(--muted); }
 .shell { display: flex; min-height: 100vh; }
