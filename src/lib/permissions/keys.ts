@@ -1,0 +1,13 @@
+// Mirrors public.permissions (seeded in migration 0002). Keep in sync when adding permissions.
+export type Permission =
+  | 'accountability.create' | 'accountability.delete' | 'accountability.read' | 'accountability.update' | 'audit.read' | 'automations.create' | 'automations.delete' | 'automations.read' | 'automations.update' | 'billing.create' | 'billing.delete' | 'billing.export' | 'billing.read' | 'billing.update' | 'coaching.create' | 'coaching.delete' | 'coaching.read' | 'coaching.update' | 'community.create' | 'community.delete' | 'community.moderate' | 'community.read' | 'community.update' | 'contacts.create' | 'contacts.delete' | 'contacts.export' | 'contacts.read' | 'contacts.update' | 'content.create' | 'content.delete' | 'content.read' | 'content.update' | 'custom_fields.create' | 'custom_fields.delete' | 'custom_fields.read' | 'custom_fields.update' | 'dashboards.create' | 'dashboards.delete' | 'dashboards.read' | 'dashboards.update' | 'enrollments.create' | 'enrollments.delete' | 'enrollments.read' | 'enrollments.update' | 'files.create' | 'files.delete' | 'files.read' | 'files.update' | 'financials.read' | 'goals.create' | 'goals.delete' | 'goals.read' | 'goals.update' | 'health.create' | 'health.delete' | 'health.read' | 'health.update' | 'kpis.create' | 'kpis.delete' | 'kpis.export' | 'kpis.read' | 'kpis.update' | 'meetings.create' | 'meetings.delete' | 'meetings.read' | 'meetings.update' | 'members.create' | 'members.delete' | 'members.read' | 'members.update' | 'messages.create' | 'messages.delete' | 'messages.read' | 'messages.update' | 'notes.create' | 'notes.delete' | 'notes.read' | 'notes.update' | 'offers.create' | 'offers.delete' | 'offers.read' | 'offers.update' | 'organization.create' | 'organization.delete' | 'organization.export' | 'organization.read' | 'organization.update' | 'programs.create' | 'programs.delete' | 'programs.grade' | 'programs.read' | 'programs.update' | 'reports.export' | 'reports.read' | 'roles.manage' | 'roles.read' | 'sales.create' | 'sales.delete' | 'sales.export' | 'sales.read' | 'sales.update' | 'sops.create' | 'sops.delete' | 'sops.read' | 'sops.update' | 'tasks.create' | 'tasks.delete' | 'tasks.read' | 'tasks.read_all' | 'tasks.update' | 'templates.apply';
+
+export const ROLE_KEYS = {
+  platform: ['super_admin', 'internal_team'],
+  staff: ['account_manager', 'coach', 'sales_manager', 'content_manager'],
+  member: ['client_admin', 'client_team_member', 'student'],
+} as const;
+
+export type StaffRoleKey = (typeof ROLE_KEYS.staff)[number];
+/** System member roles; organizations may also define custom role keys. */
+export type MemberRoleKey = (typeof ROLE_KEYS.member)[number] | (string & {});
