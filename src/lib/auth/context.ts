@@ -1,5 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
+import { notFound, redirect } from 'next/navigation';
 import { AppError, unwrap } from '@/lib/errors';
 import type { Permission } from '@/lib/permissions/keys';
 import { createClient } from '@/lib/supabase/server';
@@ -51,6 +52,20 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
     permissions: new Set(row.permissions),
   };
 });
+
+/**
+ * requireOrg for pages. A workspace the viewer cannot enter looks exactly like one that does not exist (404),
+ * instead of surfacing as an application error. Actions keep using requireOrg so they can report the reason.
+ */
+export async function requireOrgPage(slug: string): Promise<OrgContext> {
+  try {
+    return await requireOrg(slug);
+  } catch (e) {
+    if (e instanceof AppError && e.code === 'unauthenticated') redirect('/login');
+    if (e instanceof AppError && (e.code === 'not_found' || e.code === 'forbidden' || e.code === 'validation')) notFound();
+    throw e;
+  }
+}
 
 export function can(ctx: OrgContext, permission: Permission): boolean {
   return ctx.ctx.is_super_admin || ctx.permissions.has(permission);

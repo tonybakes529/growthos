@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { requireOrg, can } from '@/lib/auth/context';
-import { AppError } from '@/lib/errors';
+import { redirect } from 'next/navigation';
+import { requireOrgPage, can } from '@/lib/auth/context';
 import { getQuestionnaire, submitQuestionnaire } from '@/modules/onboarding/actions';
+import { getPendingOnboarding } from '@/modules/customers/actions';
 import { setTaskStatus } from '@/modules/tasks/actions';
 import { done } from '@/components/flash';
 import { Bar, Flash, PageHead, Pill, Stat, day, dayTime } from '@/components/ui';
@@ -12,12 +12,12 @@ const fmt = (v: number | null, unit: string | null) =>
 
 export default async function WorkspaceHome({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams: Promise<{ msg?: string; err?: string }> }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
-  const ctx = await requireOrg(orgSlug).catch((e) => { if (e instanceof AppError) notFound(); throw e; });
+  const ctx = await requireOrgPage(orgSlug);
   const org = ctx.organizationId;
   const me = ctx.ctx.effective_user_id;
   const path = `/w/${orgSlug}`;
 
-  const [kpis, myTaskIds, calls, wins, blockers, enrollments, announcements, q] = await Promise.all([
+  const [kpis, myTaskIds, calls, wins, blockers, enrollments, announcements, q, pending, customers] = await Promise.all([
     ctx.sb.from('kpi_latest_v').select('kpi_definition_id, kpi_name, kpi_key, unit, value, target_value, status, period_start').eq('organization_id', org),
     ctx.sb.from('task_assignments').select('task_id').eq('user_id', me).eq('organization_id', org),
     ctx.sb.from('coaching_sessions').select('id, title, scheduled_start, scheduled_end, status').eq('organization_id', org)
@@ -27,7 +27,10 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
     ctx.sb.from('program_enrollments').select('program_id, progress_percent, lessons_completed, lessons_total').eq('organization_id', org).eq('user_id', me),
     ctx.sb.from('announcements').select('id, title, body, publish_at').eq('organization_id', org).is('deleted_at', null).order('publish_at', { ascending: false }).limit(2),
     getQuestionnaire({ orgSlug }),
+    ctx.roleKey === 'student' ? getPendingOnboarding({}) : null,
+    can(ctx, 'enrollments.read') ? ctx.sb.from('customer_onboardings').select('status').eq('organization_id', org) : null,
   ]);
+  if (pending?.ok && pending.data?.organization_slug === orgSlug) redirect(`/start/${orgSlug}`);
   const taskIds = (myTaskIds.data ?? []).map((t) => t.task_id);
   const progIds = (enrollments.data ?? []).map((e) => e.program_id);
   const [taskRes, progRes] = await Promise.all([
@@ -55,10 +58,19 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
 
   return (
     <>
-      <PageHead sub={ctx.name} title="Home">
+      <PageHead sub={ctx.name} title="Dashboard">
         {can(ctx, 'kpis.create') && <Link className="btn primary" href={`${path}/scorecard`}>Submit scorecard</Link>}
       </PageHead>
       <Flash msg={sp.msg} err={sp.err} />
+
+      {customers?.data && customers.data.length > 0 && (
+        <div className="grid g4">
+          <Link href={`${path}/customers`} style={{ textDecoration: 'none', color: 'inherit' }}><Stat k="Customers" v={customers.data.length} s="View all" /></Link>
+          <Stat k="Invited" v={customers.data.filter((c) => c.status === 'invited').length} s="No login yet" />
+          <Stat k="Onboarding in progress" v={customers.data.filter((c) => c.status === 'registered' || c.status === 'in_progress').length} />
+          <Stat k="Onboarding complete" v={customers.data.filter((c) => c.status === 'completed').length} />
+        </div>
+      )}
 
       {showQuestionnaire && (
         <form className="card" action={submitQ} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

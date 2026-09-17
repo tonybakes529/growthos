@@ -53,6 +53,9 @@ export const getInvitationPreview = action(z.object({ token: z.string().min(32).
   const sb = await createClient();
   return unwrap(await sb.schema('app').rpc('get_invitation', { p_token: token })) as null | {
     email: string; organization_name: string; role_name: string; status: string; expires_at: string;
+    organization_slug: string; logo_url: string | null; brand_color: string | null;
+    /** A buyer of one or more courses, as opposed to a teammate being added to the workspace. */
+    is_customer: boolean; first_name: string | null; account_exists: boolean; courses: string[];
   };
 });
 
