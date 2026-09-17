@@ -1,6 +1,13 @@
 {
+  "framework": "nextjs",
   "crons": [
-    { "path": "/api/cron/events", "schedule": "0 8 * * *" },
-    { "path": "/api/cron/daily", "schedule": "0 9 * * *" }
+    {
+      "path": "/api/cron/events",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/daily",
+      "schedule": "0 9 * * *"
+    }
   ]
 }
