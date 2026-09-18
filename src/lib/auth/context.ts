@@ -67,6 +67,16 @@ export async function requireOrgPage(slug: string): Promise<OrgContext> {
   }
 }
 
+/**
+ * Someone who is in the workspace only to learn: a customer / student. Decided by what they can do,
+ * not by the name of their role, so a custom "learner" role behaves the same way.
+ */
+export function isLearner(ctx: OrgContext): boolean {
+  if (ctx.ctx.is_super_admin || ctx.ctx.is_platform_staff) return false;
+  // The system student role holds only community.* and messages.*; anything operational makes you part of the team.
+  return [...ctx.permissions].every((p) => p.startsWith('community.') || p.startsWith('messages.'));
+}
+
 export function can(ctx: OrgContext, permission: Permission): boolean {
   return ctx.ctx.is_super_admin || ctx.permissions.has(permission);
 }

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { requireOrgPage, can } from '@/lib/auth/context';
 import { createForm, listForms } from '@/modules/onboarding-forms/actions';
 import { Flash, PageHead, Pill, day } from '@/components/ui';
+import { SubNav, coursesTabs } from '@/components/subnav';
 
 export default async function OnboardingForms({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams: Promise<{ msg?: string; err?: string }> }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
@@ -23,7 +24,8 @@ export default async function OnboardingForms({ params, searchParams }: { params
 
   return (
     <>
-      <PageHead sub={ctx.name} title="Onboarding" />
+      <PageHead sub={`${ctx.name} · Courses`} title="Onboarding forms" />
+      <SubNav items={coursesTabs(orgSlug, can(ctx, 'programs.update'))} current="onboarding" />
       <Flash msg={sp.msg} err={sp.err ?? (res.ok ? undefined : res.error.message)} />
       <p className="muted" style={{ margin: 0, maxWidth: 720 }}>
         The questions a new customer answers right after creating their login. Build a form, publish it, attach it to a course. From then on every buyer of that course gets it automatically.

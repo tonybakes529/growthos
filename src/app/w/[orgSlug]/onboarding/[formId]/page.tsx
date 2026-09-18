@@ -91,7 +91,7 @@ export default async function FormBuilder({ params, searchParams }: { params: Pr
       </PageHead>
       <Flash msg={sp.msg} err={sp.err} />
 
-      <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)' }}>
+      <div className="grid builder">
         <div className="card">
           <h2>Questions ({questions.length})</h2>
           {!questions.length && <p className="muted">No questions yet. Add the first one below.</p>}

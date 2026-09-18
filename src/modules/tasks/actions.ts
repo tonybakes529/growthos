@@ -97,3 +97,19 @@ export const listTasks = action(
     return tasks.map((t) => ({ ...t, assigneeIds: assignments.filter((a) => a.task_id === t.id).map((a) => a.user_id) }));
   },
 );
+
+/**
+ * The signed-in person's open tasks across every workspace they can enter. RLS scopes both queries,
+ * so an internal team member only sees tasks in the clients they are assigned to.
+ */
+export const listMyTasksEverywhere = action(z.object({ limit: z.number().int().min(1).max(100).default(20) }), async ({ limit }) => {
+  const { sb, ctx } = await requireSession();
+  const mine = unwrap(await sb.from('task_assignments').select('task_id').eq('user_id', ctx.effective_user_id));
+  if (!mine.length) return [];
+  const tasks = unwrap(await sb.from('tasks').select('id, organization_id, title, status, priority, due_at')
+    .in('id', mine.map((m) => m.task_id)).is('deleted_at', null).not('status', 'in', '(done,canceled)')
+    .order('due_at', { ascending: true, nullsFirst: false }).limit(limit));
+  const orgIds = [...new Set(tasks.map((t) => t.organization_id))];
+  const orgs = orgIds.length ? unwrap(await sb.from('organizations').select('id, name, slug').in('id', orgIds)) : [];
+  return tasks.map((t) => ({ ...t, workspace: orgs.find((o) => o.id === t.organization_id) ?? null }));
+});

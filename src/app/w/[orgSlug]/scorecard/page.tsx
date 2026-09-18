@@ -9,9 +9,12 @@ export default async function Scorecard({ params, searchParams }: { params: Prom
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
   const ctx = await requireOrgPage(orgSlug);
   const path = `/w/${orgSlug}/scorecard`;
+  if (!can(ctx, 'kpis.read')) {
+    return (<><PageHead sub={ctx.name} title="Growth · Weekly Scorecard" /><div className="card muted">You don&apos;t have access to the scorecard.</div></>);
+  }
   const cards = (await ctx.sb.from('scorecards').select('id, name').eq('organization_id', ctx.organizationId).is('deleted_at', null).limit(1)).data ?? [];
   const card = cards[0];
-  if (!card) return (<><PageHead sub={ctx.name} title="Weekly Scorecard" /><div className="card muted">No scorecard set up for this workspace yet.</div></>);
+  if (!card) return (<><PageHead sub={ctx.name} title="Growth · Weekly Scorecard" /><div className="card muted">No scorecard set up for this workspace yet. Your Growth OS team adds one from a template.</div></>);
 
   const lastWeek = new Date(); lastWeek.setDate(lastWeek.getDate() - 7);
   const week = sp.week ?? iso(lastWeek);

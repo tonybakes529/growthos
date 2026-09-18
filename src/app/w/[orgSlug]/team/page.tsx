@@ -45,6 +45,9 @@ export default async function Team({ params, searchParams }: { params: Promise<{
     redirect(`/w/${orgSlug}`);
   }
 
+  if (!can(ctx, 'members.read')) {
+    return (<><PageHead sub={ctx.name} title="Team" /><div className="card muted">You don&apos;t have access to the team list.</div></>);
+  }
   const data = members.ok ? members.data : { members: [], staff: [] };
   const manage = can(ctx, 'roles.manage');
   return (
