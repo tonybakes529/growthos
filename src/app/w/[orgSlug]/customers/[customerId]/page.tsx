@@ -48,7 +48,7 @@ export default async function Customer({ params }: { params: Promise<{ orgSlug: 
           </ul>
           {r.status === 'invited' && can(ctx, 'enrollments.create') && (
             <p className="muted" style={{ marginBottom: 0 }}>
-              {inviteState === 'link expired' ? 'Their link has expired.' : 'Waiting for them to create their login.'} To send a fresh link, <Link href={`${back}#add`}>add them again</Link> with the same email. The old link stops working.
+              {inviteState === 'link expired' ? 'Their link has expired.' : 'Waiting for them to create their login.'} To send a fresh link, <Link href={`${back}?add=1`}>add them again</Link> with the same email. The old link stops working.
             </p>
           )}
         </div>

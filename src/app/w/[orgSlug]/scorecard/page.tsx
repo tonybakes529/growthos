@@ -1,6 +1,7 @@
 import { requireOrgPage, can } from '@/lib/auth/context';
 import { getWeeklyScorecard, submitWeeklyScorecard } from '@/modules/kpis/actions';
 import { done } from '@/components/flash';
+import { SubNav, growthTabs } from '@/components/subnav';
 import { Flash, PageHead, Pill, day } from '@/components/ui';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -40,6 +41,7 @@ export default async function Scorecard({ params, searchParams }: { params: Prom
         <a className="btn" href={`${path}?week=${shift(-7)}`}>← Previous week</a>
         <a className="btn" href={`${path}?week=${shift(7)}`}>Next week →</a>
       </PageHead>
+      <SubNav items={growthTabs(orgSlug, true, can(ctx, 'sales.read'))} current="scorecard" />
       <Flash msg={sp.msg} err={sp.err} />
       {submission && <div className="muted">Submitted {day(submission.submitted_at)} · status <Pill value={submission.status === 'submitted' ? 'on_track' : submission.status} label={submission.status} /></div>}
       <form action={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

@@ -6,7 +6,7 @@ import type { Permission } from '@/lib/permissions/keys';
 import { getMyWorkspaces } from '@/modules/organizations/actions';
 import { SideNav, type NavGroup, type NavItem } from './side-nav';
 
-type Def = { path: string; label: string; needs?: Permission; also?: string[] };
+type Def = { path: string; label: string; needs?: Permission; unless?: Permission; also?: string[] };
 
 // Five destinations for people who run the workspace, three for people who learn in it.
 // Every entry is gated on a permission key, never on a role name, so custom roles and
@@ -16,7 +16,10 @@ const MAIN: Def[] = [
   { path: '', label: 'Home' },
   { path: '/customers', label: 'Customers', needs: 'enrollments.read' },
   { path: '/programs', label: 'Courses', also: ['/lessons', '/onboarding'] },
-  { path: '/scorecard', label: 'Growth', needs: 'kpis.read' },
+  { path: '/sops', label: 'SOPs', needs: 'sops.read' },
+  { path: '/scorecard', label: 'Growth', needs: 'kpis.read', also: ['/pipeline'] },
+  // people with sales access but no KPI access still reach Growth, landing on the pipeline
+  { path: '/pipeline', label: 'Growth', needs: 'sales.read', unless: 'kpis.read' },
   { path: '/tasks', label: 'Tasks' },
 ];
 const MANAGE: Def[] = [
@@ -31,7 +34,7 @@ const LEARNER: Def[] = [
 ];
 
 function build(defs: Def[], ctx: OrgContext): NavItem[] {
-  return defs.filter((n) => !n.needs || can(ctx, n.needs)).map((n) => ({
+  return defs.filter((n) => (!n.needs || can(ctx, n.needs)) && !(n.unless && can(ctx, n.unless))).map((n) => ({
     href: `/w/${ctx.slug}${n.path}`, label: n.label, exact: n.path === '',
     also: (n.also ?? []).map((p) => `/w/${ctx.slug}${p}`),
   }));

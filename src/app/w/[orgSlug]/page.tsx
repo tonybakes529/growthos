@@ -158,12 +158,12 @@ async function TeamHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?
   const [myTasks, overdue, customers, scorecards, weekly, kpis, enrollments, courses, deals, calls, wins, blockers, q] = await Promise.all([
     listTasks({ orgSlug: ctx.slug, mine: true, statuses: ['todo', 'in_progress', 'blocked', 'in_review'], limit: 50 }),
     listTasks({ orgSlug: ctx.slug, overdueOnly: true, limit: 100 }),
-    seeCustomers ? ctx.sb.from('customer_onboardings').select('status').eq('organization_id', org) : null,
+    seeCustomers ? ctx.sb.from('customer_onboardings').select('status, program_id').eq('organization_id', org) : null,
     seeKpis ? ctx.sb.from('scorecards').select('id, name').eq('organization_id', org).is('deleted_at', null).limit(1) : null,
     seeKpis ? ctx.sb.from('weekly_scorecards').select('scorecard_id, status').eq('organization_id', org).eq('period_start', week) : null,
     seeKpis ? ctx.sb.from('kpi_latest_v').select('kpi_definition_id, kpi_name, unit, value, target_value, status, period_start').eq('organization_id', org) : null,
     seeCustomers ? ctx.sb.from('program_enrollments').select('status, progress_percent').eq('organization_id', org).in('status', ['active', 'completed']) : null,
-    ctx.sb.from('programs').select('id, status').eq('organization_id', org).is('deleted_at', null),
+    ctx.sb.from('programs').select('id, status, onboarding_form_id').eq('organization_id', org).is('deleted_at', null),
     seeSales ? ctx.sb.from('opportunities').select('value_cents').eq('organization_id', org).eq('status', 'open').is('deleted_at', null) : null,
     ctx.sb.from('coaching_sessions').select('id, title, scheduled_start').eq('organization_id', org).eq('status', 'scheduled').gte('scheduled_start', nowIso).order('scheduled_start').limit(3),
     ctx.sb.from('client_wins').select('id, title, occurred_on').eq('organization_id', org).is('deleted_at', null).order('occurred_on', { ascending: false }).limit(3),
@@ -174,7 +174,9 @@ async function TeamHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?
   const mine = myTasks.ok ? myTasks.data : [];
   const overdueCount = overdue.ok ? overdue.data.length : 0;
   const cs = customers?.data ?? [];
-  const unfinished = cs.filter((c) => c.status === 'registered' || c.status === 'in_progress').length;
+  // "Not finished onboarding" only makes sense when their course actually has a form to fill in.
+  const withForm = new Set((courses.data ?? []).filter((c) => c.onboarding_form_id).map((c) => c.id));
+  const unfinished = cs.filter((c) => (c.status === 'registered' || c.status === 'in_progress') && withForm.has(c.program_id)).length;
   const invited = cs.filter((c) => c.status === 'invited').length;
   const card = scorecards?.data?.[0] ?? null;
   const weekRow = card ? (weekly?.data ?? []).find((w) => w.scorecard_id === card.id) : null;
@@ -212,7 +214,7 @@ async function TeamHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?
   return (
     <>
       <PageHead sub={ctx.name} title="Home">
-        {seeCustomers && can(ctx, 'enrollments.create') && <Link className="btn" href={`${path}/customers#add`}>Add customer</Link>}
+        {seeCustomers && can(ctx, 'enrollments.create') && <Link className="btn" href={`${path}/customers?add=1`}>Add customer</Link>}
         {scorecardDue && can(ctx, 'kpis.create') && <Link className="btn primary" href={`${path}/scorecard?week=${week}`}>Submit scorecard</Link>}
       </PageHead>
       <Flash msg={sp.msg} err={sp.err} />

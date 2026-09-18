@@ -6,12 +6,13 @@ import { requireOrgPage, can } from '@/lib/auth/context';
 import { getEnv } from '@/lib/env';
 import { addCustomer, listCustomers, CUSTOMER_STATUSES } from '@/modules/customers/actions';
 import { Flash, PageHead, Pill, Stat, day } from '@/components/ui';
+import { Modal } from '@/components/modal';
 
 const LINK_COOKIE = 'customer_link';
 const STATUS_LABEL: Record<string, string> = { invited: 'Invited', registered: 'Not started', in_progress: 'In progress', completed: 'Complete' };
 
 export default async function Customers({ params, searchParams }: {
-  params: Promise<{ orgSlug: string }>; searchParams: Promise<{ course?: string; status?: string; msg?: string; err?: string }>;
+  params: Promise<{ orgSlug: string }>; searchParams: Promise<{ course?: string; status?: string; add?: string; msg?: string; err?: string }>;
 }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
   const ctx = await requireOrgPage(orgSlug);
@@ -53,7 +54,25 @@ export default async function Customers({ params, searchParams }: {
 
   return (
     <>
-      <PageHead sub={ctx.name} title="Customers" />
+      <PageHead sub={ctx.name} title="Customers">
+        {can(ctx, 'enrollments.create') && (
+          <Modal label="+ Add customer" title="Add a customer" primary open={!!sp.add || !!sp.err}>
+            <form action={add}>
+              <p className="muted" style={{ margin: 0 }}>Does exactly what a purchase does: creates the customer, links them to the course, and makes their personal sign-up link. Use it for offline sales or to try the journey yourself.</p>
+              {data.programs.length ? (<>
+                <label className="f">Course
+                  <select name="course" required defaultValue={sp.course ?? data.programs[0]!.id}>
+                    {data.programs.map((p) => <option key={p.id} value={p.id}>{p.title}{p.hasForm ? '' : ' (no onboarding form)'}</option>)}
+                  </select></label>
+                <div className="row"><label className="f" style={{ flex: 1 }}>First name<input name="first" autoComplete="off" /></label>
+                  <label className="f" style={{ flex: 1 }}>Last name<input name="last" autoComplete="off" /></label></div>
+                <label className="f">Email<input name="email" type="email" required autoComplete="off" autoFocus /></label>
+                <div><button className="btn primary" type="submit">Add customer</button></div>
+              </>) : <p style={{ margin: 0 }}>Create a <Link href={`/w/${orgSlug}/programs`}>course</Link> first.</p>}
+            </form>
+          </Modal>
+        )}
+      </PageHead>
       <Flash msg={sp.msg} err={sp.err ?? (all.ok ? undefined : all.error.message)} />
       {link && sp.msg && (
         <div className="card">
@@ -101,32 +120,11 @@ export default async function Customers({ params, searchParams }: {
                 <td>{day(c.completed_at)}</td>
               </tr>
             ))}
-            {!rows.length && <tr><td colSpan={6} className="muted">{data.customers.length ? 'No customers match this filter.' : 'No customers yet. They appear here automatically when someone buys a course.'}</td></tr>}
+            {!rows.length && <tr><td colSpan={6} className="muted">{data.customers.length ? 'No customers match this filter.' : 'No customers yet. They appear here automatically when someone buys a course, or use "Add customer" to add one by hand.'}</td></tr>}
           </tbody>
         </table>
       </div>
 
-      {can(ctx, 'enrollments.create') && (
-        <form id="add" className="card" action={add} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <h2 style={{ marginBottom: 4 }}>Add a customer</h2>
-            <p className="muted" style={{ margin: 0 }}>Does exactly what a purchase does: creates the customer, links them to the course, and makes their personal sign-up link. Use it for offline sales or to try the journey yourself.</p>
-          </div>
-          {data.programs.length ? (
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
-              <label className="f" style={{ minWidth: 220 }}>Course
-                <select name="course" required defaultValue={sp.course ?? data.programs[0]!.id}>
-                  {data.programs.map((p) => <option key={p.id} value={p.id}>{p.title}{p.hasForm ? '' : ' (no onboarding form)'}</option>)}
-                </select>
-              </label>
-              <label className="f">First name<input name="first" autoComplete="off" /></label>
-              <label className="f">Last name<input name="last" autoComplete="off" /></label>
-              <label className="f" style={{ flex: 1, minWidth: 220 }}>Email<input name="email" type="email" required autoComplete="off" /></label>
-              <button className="btn primary" type="submit">Add customer</button>
-            </div>
-          ) : <p style={{ margin: 0 }}>Create a <Link href={`/w/${orgSlug}/programs`}>course</Link> first.</p>}
-        </form>
-      )}
     </>
   );
 }
