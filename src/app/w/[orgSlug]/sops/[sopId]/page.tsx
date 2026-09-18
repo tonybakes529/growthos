@@ -49,7 +49,7 @@ export default async function SopPage({ params, searchParams }: { params: Promis
 
   return (
     <>
-      <Link href={list}>← SOPs</Link>
+      <Link href={sop.department ? `${list}?tab=${encodeURIComponent(sop.department)}` : list}>← {sop.department ? `${sop.department} SOPs` : 'SOPs'}</Link>
       <PageHead sub={`${ctx.name} · SOPs${sop.department ? ` · ${sop.department}` : ''}`} title={sop.title}>
         <Pill value={sop.status === 'active' ? 'active' : 'pending'} label={sop.status} />
         {due && <Pill value="at_risk" label="review due" />}
@@ -104,7 +104,8 @@ export default async function SopPage({ params, searchParams }: { params: Promis
             <form className="card" action={meta} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <h2 style={{ margin: 0 }}>Details</h2>
               <label className="f">Title<input name="title" required maxLength={200} defaultValue={sop.title} /></label>
-              <label className="f">Department<input name="department" maxLength={80} defaultValue={sop.department ?? ''} /></label>
+              <label className="f">Tab<input name="department" maxLength={80} defaultValue={sop.department ?? ''} placeholder="General" />
+                <span className="qhelp">Type another tab&apos;s name to move this SOP there.</span></label>
               <label className="f">Summary<input name="summary" maxLength={1000} defaultValue={sop.summary ?? ''} /></label>
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <button className="btn" type="submit">Save details</button>

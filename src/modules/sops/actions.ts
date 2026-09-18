@@ -2,7 +2,7 @@ import 'server-only';
 
 import { z } from 'zod';
 import { action, zId, zSlug } from '@/lib/action';
-import { requireOrg, assertCan, can } from '@/lib/auth/context';
+import { requireOrg, assertCan, can, type OrgContext } from '@/lib/auth/context';
 import { AppError, unwrap, unwrapRequired } from '@/lib/errors';
 import { parseVideoUrl } from '@/modules/programs/embeds';
 
@@ -121,4 +121,60 @@ export const listSopTemplates = action(z.object({ orgSlug: zSlug }), async ({ or
   const res = await ctx.sb.from('sop_templates').select('id, name, description, category').eq('is_active', true).order('name');
   if (res.error) throw new AppError('internal', 'Could not load the SOP library', res.error);
   return res.data;
+});
+
+
+// ---- tabs ---------------------------------------------------------------------------------------
+// A tab is a department. The ordered list lives on the workspace (organizations.settings.sop_tabs) so an
+// empty tab can exist before its first SOP; any department already used by an SOP shows up as a tab too.
+
+const zTab = z.string().trim().min(1).max(80);
+
+async function readTabs(ctx: OrgContext): Promise<{ settings: Record<string, unknown>; tabs: string[] }> {
+  const org = unwrap(await ctx.sb.from('organizations').select('settings').eq('id', ctx.organizationId).single());
+  const settings = ((org.settings as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const tabs = Array.isArray(settings.sop_tabs) ? (settings.sop_tabs as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+  return { settings, tabs };
+}
+async function writeTabs(ctx: OrgContext, settings: Record<string, unknown>, tabs: string[]) {
+  unwrap(await ctx.sb.from('organizations').update({ settings: { ...settings, sop_tabs: tabs } as never }).eq('id', ctx.organizationId).select('id').single());
+}
+const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+export const listSopTabs = action(z.object({ orgSlug: zSlug }), async ({ orgSlug }) => {
+  const ctx = await requireOrg(orgSlug);
+  assertCan(ctx, 'sops.read');
+  return (await readTabs(ctx)).tabs;
+});
+
+export const addSopTab = action(z.object({ orgSlug: zSlug, name: zTab }), async (i) => {
+  const ctx = await requireOrg(i.orgSlug);
+  assertCan(ctx, 'sops.create', 'organization.update');
+  const { settings, tabs } = await readTabs(ctx);
+  if (tabs.some((t) => same(t, i.name))) throw new AppError('conflict', `There is already a "${i.name}" tab`);
+  await writeTabs(ctx, settings, [...tabs, i.name]);
+  return { name: i.name };
+});
+
+/** Renaming a tab moves every SOP in it along. */
+export const renameSopTab = action(z.object({ orgSlug: zSlug, from: zTab, to: zTab }), async (i) => {
+  const ctx = await requireOrg(i.orgSlug);
+  assertCan(ctx, 'sops.update', 'organization.update');
+  const { settings, tabs } = await readTabs(ctx);
+  if (!same(i.from, i.to) && tabs.some((t) => same(t, i.to))) throw new AppError('conflict', `There is already a "${i.to}" tab`);
+  unwrap(await ctx.sb.from('standard_operating_procedures').update({ department: i.to })
+    .eq('organization_id', ctx.organizationId).eq('department', i.from).is('deleted_at', null).select('id'));
+  await writeTabs(ctx, settings, tabs.some((t) => same(t, i.from)) ? tabs.map((t) => (same(t, i.from) ? i.to : t)) : [...tabs, i.to]);
+  return { name: i.to };
+});
+
+/** Removing a tab never deletes SOPs: they move to General. */
+export const removeSopTab = action(z.object({ orgSlug: zSlug, name: zTab }), async (i) => {
+  const ctx = await requireOrg(i.orgSlug);
+  assertCan(ctx, 'sops.update', 'organization.update');
+  const { settings, tabs } = await readTabs(ctx);
+  const moved = unwrap(await ctx.sb.from('standard_operating_procedures').update({ department: null })
+    .eq('organization_id', ctx.organizationId).eq('department', i.name).is('deleted_at', null).select('id'));
+  await writeTabs(ctx, settings, tabs.filter((t) => !same(t, i.name)));
+  return { moved: moved.length };
 });
