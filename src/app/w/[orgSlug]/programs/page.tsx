@@ -22,6 +22,9 @@ export default async function Programs({ params, searchParams }: { params: Promi
     <>
       <PageHead sub={ctx.name} title="Courses" />
       <SubNav items={coursesTabs(orgSlug, can(ctx, 'programs.update'))} current="courses" />
+      {can(ctx, 'sops.read') && (
+        <p className="muted" style={{ margin: 0, maxWidth: 720 }}>Courses are what your customers (students) learn. Procedures for your own team live in <Link href={`/w/${orgSlug}/sops`}>SOPs</Link>.</p>
+      )}
       <Flash msg={sp.msg} err={sp.err ?? (programs.ok ? undefined : programs.error.message)} />
       <div className="grid g3">
         {(programs.ok ? programs.data : []).map((p) => {
@@ -29,7 +32,7 @@ export default async function Programs({ params, searchParams }: { params: Promi
           return (
             <Link key={p.id} href={`${path}/${p.id}`} className="card" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div className="row" style={{ justifyContent: 'space-between' }}><h2 style={{ margin: 0 }}>{p.title}</h2><Pill value={p.status === 'published' ? 'active' : 'paused'} label={p.status} /></div>
-              <div className="muted">{p.subtitle ?? ''}</div>
+              <div className="muted">{p.subtitle ?? ''}{p.source_template_id && can(ctx, 'programs.update') && <> <Pill value="none" label="from Growth OS" /></>}</div>
               {e ? <><Bar pct={Number(e.progress_percent)} /><div className="muted">{e.lessons_completed} of {e.lessons_total} lessons</div></> : <div className="muted">Not enrolled</div>}
             </Link>
           );

@@ -120,3 +120,8 @@ details.edit > summary { cursor: pointer; color: var(--accent); font-weight: 600
 /* Lesson video embeds (Loom, YouTube, Tella) */
 .video { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; overflow: hidden; }
 .video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* SOP documents */
+.sopbody h2 { font-size: 17px; margin: 16px 0 6px; } .sopbody h3 { font-size: 14px; margin: 12px 0 4px; color: var(--ink); }
+.sopbody p { margin: 6px 0; line-height: 1.55; } .sopbody ul, .sopbody ol { margin: 6px 0 10px; padding-left: 22px; line-height: 1.55; }
+.sopsteps { margin: 0 0 14px; padding-left: 22px; } .sopsteps li { padding: 4px 0; }

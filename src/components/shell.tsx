@@ -16,6 +16,7 @@ const MAIN: Def[] = [
   { path: '', label: 'Home' },
   { path: '/customers', label: 'Customers', needs: 'enrollments.read' },
   { path: '/programs', label: 'Courses', also: ['/lessons', '/onboarding'] },
+  { path: '/sops', label: 'SOPs', needs: 'sops.read' },
   { path: '/scorecard', label: 'Growth', needs: 'kpis.read' },
   { path: '/tasks', label: 'Tasks' },
 ];

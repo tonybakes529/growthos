@@ -76,7 +76,7 @@ The operator has no separate "operator version" of a workspace. The workspace sc
 
 Every client workspace has the same screens. What a person sees depends on their permissions, never on the name of their role, so custom roles and restricted team members get exactly the pages they can use.
 
-**Navigation for people who run the workspace**: Home, Customers, Courses, Growth, Tasks, then a smaller "Manage" group with Team, Automations and Activity. Onboarding forms sit inside Courses as a second tab. Growth opens the weekly scorecard. A link only appears when the person can use the page behind it.
+**Navigation for people who run the workspace**: Home, Customers, Courses, SOPs, Growth, Tasks, then a smaller "Manage" group with Team, Automations and Activity. Onboarding forms sit inside Courses as a second tab. Growth opens the weekly scorecard. A link only appears when the person can use the page behind it.
 
 **Navigation for customers (students)**: Home, My Courses, My Tasks. A student is anyone whose permissions are limited to community and messaging, which is what the system student role holds.
 
@@ -87,6 +87,7 @@ Every client workspace has the same screens. What a person sees depends on their
 | Home | Needs attention, my tasks, summary tiles, latest KPIs, calls, wins, blockers | Same, minus customers and money KPIs | One next action, my courses, my tasks, calls |
 | Customers | Every buyer and their onboarding status | Not shown | Not shown |
 | Courses | All courses, builder, onboarding forms tab | All courses, no builder | Only enrolled courses |
+| SOPs | Read, write, version, archive | Read only | Not shown |
 | Growth | Weekly scorecard, enter and submit | Scorecard without financial rows | Not shown |
 | Tasks | All tasks, create and assign | Tasks, create | Their own tasks |
 | Team, Automations, Activity | Yes | Team and Activity only | Not shown |
@@ -122,6 +123,15 @@ The client's most important operational screen. One row per customer per course.
 **Add a customer.** Pick a course, enter name and email. This does exactly what a purchase does, minus the payment: the customer record appears as Invited and a personal link is shown once. Use it for offline sales, or to try the customer journey yourself. Adding someone who is already Invited issues a fresh link and kills the old one. Adding someone who already has a login in this workspace enrols them immediately with no link needed.
 
 **The link is shown once.** Only a hash of it is stored, so it cannot be displayed again. If it is lost, add the customer again to get a new one.
+
+### 5.3a SOPs (the team's playbook)
+The clear line in the product: **Courses are for customers, SOPs are for the team.** A customer never sees an SOP.
+
+- One library per workspace, grouped by department. Each SOP has a title, a summary, a status (draft, active, archived) and a numbered history of versions.
+- Anyone with `sops.create` (client admins, and the operator inside the workspace) writes new SOPs in plain text; lines starting with `#` become headings, `1.` or `-` become lists. Editing always publishes a new version with an optional "what changed" note; older versions stay readable.
+- The operator can also drop SOPs in from the Growth OS library ("Add from the Growth OS library"), which copies the SOP so the client can edit their copy. Those show "From Growth OS".
+- "Mark reviewed" records a review date. Archive hides it from the main list; delete soft-deletes it.
+- Restricted team members read SOPs but cannot edit them. Students have no access at all.
 
 ### 5.4 Onboarding (the form builder)
 Where the operator, or the client admin, builds the questions a new buyer answers right after creating their login.
@@ -251,4 +261,5 @@ After step 4 the operator does nothing per customer. No creating accounts, no se
 - Lesson content types beyond text and video (downloads, images, documents, quizzes and assignments) can be stored and shown but cannot yet be added from the interface.
 - The Sales Pipeline screen was removed on purpose: sales are tracked outside the platform. A read-only open-deals tile remains on Home for people with sales access.
 - There is no way yet to delete a lesson block or reorder blocks from the interface.
+- Courses copied from the operator's template library into a client ("Revenue Accelerator", "Client Onboarding Bootcamp") are marked "from Growth OS" but still appear beside the client's own courses. Under the courses-are-for-customers rule they belong in SOPs or should stop being copied by the default onboarding template; that is a data decision for the operator.
 - A customer's onboarding form is chosen when they start it. If the client swaps the course's form afterwards, customers already in progress keep the form they began.

@@ -31,7 +31,7 @@ export const listPrograms = action(z.object({ orgSlug: zSlug }), async ({ orgSlu
   // builders see all; learners only get rows RLS allows (enrolled / org-visible)
   return unwrap(
     await ctx.sb.from('programs')
-      .select('id, title, slug, subtitle, status, visibility, is_sequential, certificate_enabled, published_at, updated_at')
+      .select('id, title, slug, subtitle, status, visibility, is_sequential, certificate_enabled, published_at, updated_at, source_template_id')
       .eq('organization_id', ctx.organizationId).is('deleted_at', null).order('title'),
   );
 });
