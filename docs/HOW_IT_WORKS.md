@@ -127,7 +127,7 @@ The client's most important operational screen. One row per customer per course.
 ### 5.3a SOPs (the team's playbook)
 The clear line in the product: **Courses are for customers, SOPs are for the team.** A customer never sees an SOP.
 
-- One library per workspace, grouped by department. Each SOP has a title, a summary, a status (draft, active, archived) and a numbered history of versions.
+- One library per workspace, organised in **tabs** (Sales, Delivery, Marketing...). "All" shows everything. Anyone who manages the workspace can add a tab with "+ Tab", rename it, or remove it (its SOPs move to General, nothing is deleted). A new SOP lands in the tab you are on. Each SOP has a title, a summary, a status (draft, active, archived) and a numbered history of versions.
 - Anyone with `sops.create` (client admins, and the operator inside the workspace) writes new SOPs in plain text; lines starting with `#` become headings, `1.` or `-` become lists. Editing always publishes a new version with an optional "what changed" note; older versions stay readable.
 - The operator can also drop SOPs in from the Growth OS library ("Add from the Growth OS library"), which copies the SOP so the client can edit their copy. Those show "From Growth OS".
 - "Mark reviewed" records a review date. Archive hides it from the main list; delete soft-deletes it.
