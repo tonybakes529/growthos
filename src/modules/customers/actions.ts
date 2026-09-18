@@ -58,13 +58,24 @@ export const getCustomer = action(z.object({ orgSlug: zSlug, onboardingId: zId }
   const rec = unwrapRequired(await ctx.sb.from('customer_onboardings')
     .select('id, program_id, form_id, contact_id, email, user_id, status, invited_at, registered_at, started_at, completed_at, invitation_id, purchase_id')
     .eq('id', onboardingId).eq('organization_id', ctx.organizationId).maybeSingle(), 'Customer');
-  const [contact, program, answers, invitation] = await Promise.all([
+  const [contact, program, answers, invitation, enrollments, assigned] = await Promise.all([
     rec.contact_id ? ctx.sb.from('contacts').select('first_name, last_name, phone, company, lifecycle_stage').eq('id', rec.contact_id).maybeSingle() : null,
     ctx.sb.from('programs').select('id, title, onboarding_form_id').eq('id', rec.program_id).maybeSingle(),
     ctx.sb.from('customer_onboarding_answers').select('question_id, value, updated_at').eq('onboarding_id', rec.id),
     rec.invitation_id && can(ctx, 'members.read')
       ? ctx.sb.from('invitations').select('status, expires_at').eq('id', rec.invitation_id).maybeSingle() : null,
+    // everything this person is enrolled in here, not only the course on this record
+    rec.user_id ? ctx.sb.from('program_enrollments').select('id, program_id, status, progress_percent, lessons_completed, lessons_total, enrolled_at, completed_at, last_activity_at')
+      .eq('organization_id', ctx.organizationId).eq('user_id', rec.user_id).neq('status', 'revoked') : null,
+    rec.user_id && can(ctx, 'tasks.read') ? ctx.sb.from('task_assignments').select('task_id').eq('organization_id', ctx.organizationId).eq('user_id', rec.user_id) : null,
   ]);
+  const enr = enrollments ? unwrap(enrollments) : [];
+  const taskIds = assigned ? unwrap(assigned).map((a) => a.task_id) : [];
+  const [courseRows, taskRows] = await Promise.all([
+    enr.length ? ctx.sb.from('programs').select('id, title').in('id', enr.map((e) => e.program_id)) : null,
+    taskIds.length ? ctx.sb.from('tasks').select('id, title, status, due_at, priority').in('id', taskIds).is('deleted_at', null).order('due_at', { nullsFirst: false }).limit(20) : null,
+  ]);
+  const courseTitles = courseRows ? unwrap(courseRows) : [];
   const prog = unwrap(program);
   const formId = rec.form_id ?? prog?.onboarding_form_id ?? null;
   const [form, questions] = await Promise.all([
@@ -83,6 +94,8 @@ export const getCustomer = action(z.object({ orgSlug: zSlug, onboardingId: zId }
     form: form ? unwrap(form) : null,
     invitation: invitation ? unwrap(invitation) : null,
     ...lifecycle(rec.status, !!formId),
+    enrollments: enr.map((e) => ({ ...e, title: courseTitles.find((c) => c.id === e.program_id)?.title ?? 'Course' })),
+    tasks: taskRows ? unwrap(taskRows) : [],
     responses: (questions ? unwrap(questions) : [])
       .map((q) => ({ ...q, answer: ans.find((a) => a.question_id === q.id) ?? null }))
       .filter((q) => !q.deleted_at || q.answer),

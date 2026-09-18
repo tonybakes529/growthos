@@ -4,6 +4,7 @@ import { createProgram, listPrograms } from '@/modules/programs/actions';
 import { listMyEnrollments } from '@/modules/enrollments/actions';
 import { done } from '@/components/flash';
 import { Bar, Flash, PageHead, Pill } from '@/components/ui';
+import { SubNav, coursesTabs } from '@/components/subnav';
 
 export default async function Programs({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams: Promise<{ msg?: string; err?: string }> }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
@@ -20,6 +21,7 @@ export default async function Programs({ params, searchParams }: { params: Promi
   return (
     <>
       <PageHead sub={ctx.name} title="Courses" />
+      <SubNav items={coursesTabs(orgSlug, can(ctx, 'programs.update'))} current="courses" />
       <Flash msg={sp.msg} err={sp.err ?? (programs.ok ? undefined : programs.error.message)} />
       <div className="grid g3">
         {(programs.ok ? programs.data : []).map((p) => {

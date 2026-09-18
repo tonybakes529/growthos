@@ -309,9 +309,7 @@ Roadmap and milestones, Goals, KPI definitions and trends, Content tracker, Coac
 
 ### Known UI defects (as of 2026-09-17)
 
-1. The sidebar shows all six workspace links to every role. A student sees "Sales Pipeline" and gets "You don't have access to sales".
-2. The Team page prints the raw string "Missing permission: members.read" to a student.
-3. Apex Roofing has no student in the seed data, only Northstar Fitness does.
+1. Apex Roofing has no student in the seed data, only Northstar Fitness does. (The sidebar and Team page defects listed here earlier were fixed on 2026-09-17.)
 
 ---
 
@@ -336,7 +334,11 @@ Hierarchy: operator (super admin or staff) -> client (`organizations`) -> course
 
 **Status values** on `customer_onboardings.status`: `invited` -> `registered` -> `in_progress` -> `completed`. The UI shows Invited or Active, and Not started, In progress or Complete.
 
-**Pages**: `/w/[slug]/customers`, `/customers/[id]`, `/onboarding` (form list), `/onboarding/[formId]` (builder: add, edit, delete, reorder, required, publish, attach to course, wording, branding), `/onboarding/[formId]/preview`, `/automations`, `/activity`. The sidebar is now permission-aware (`NAV` in `shell.tsx`).
+**Pages**: `/w/[slug]/customers`, `/customers/[id]` (journey, details, enrollments with progress, assigned tasks, answers), `/onboarding` (form list, a tab inside Courses), `/onboarding/[formId]` (builder: add, edit, delete, reorder, required, publish, attach to course, wording, branding), `/onboarding/[formId]/preview`, `/automations`, `/activity`.
+
+**Navigation** (`shell.tsx`): `MAIN` = Home, Customers (`enrollments.read`), Courses, Growth (`kpis.read`, opens `/scorecard`), Tasks; `MANAGE` = Team (`members.read`), Automations (`automations.read`), Activity (`organization.read`); `LEARNER` = Home, My Courses, My Tasks. `isLearner(ctx)` in `auth/context.ts` is true when every permission is in `community.*` or `messages.*`, which is what the system student role holds. Gate on permission keys, never role names. `SubNav` in `components/subnav.tsx` gives Courses its "Courses | Onboarding forms" tabs. URLs did not change.
+
+**Home screens** (`/w/[slug]/page.tsx`): `LearnerHome` computes one next action from `getProgramOutline` (respects drip and sequencing), `TeamHome` builds a "Needs attention" list from overdue tasks, the reporting week's scorecard status, unfinished customers, off-track KPIs and blockers. `/admin/clients` derives per-client reasons from the same signals `admin_client_overview_v.needs_attention` uses, and lists the operator's tasks across workspaces via `listMyTasksEverywhere`.
 
 **Security model**: forms need `programs.read` to view and `programs.update` to edit. Customer records and answers need `enrollments.read`, or being the customer. The `student` role holds none of these. `customer_onboardings` and `customer_onboarding_answers` have select policies only: every write goes through the RPCs, which check `auth.uid()`. Composite foreign keys stop a course pointing at another tenant's form. Pages use `requireOrgPage()`, so a workspace you cannot enter is a 404.
 

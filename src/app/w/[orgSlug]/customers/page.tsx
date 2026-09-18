@@ -87,7 +87,7 @@ export default async function Customers({ params, searchParams }: {
         )}
       </div>
 
-      <div className="card" style={{ overflowX: 'auto' }}>
+      <div className="card tablewrap">
         <table>
           <thead><tr><th>Customer</th><th>Course</th><th>Status</th><th>Onboarding</th><th>Invited</th><th>Completed</th></tr></thead>
           <tbody>
@@ -107,7 +107,7 @@ export default async function Customers({ params, searchParams }: {
       </div>
 
       {can(ctx, 'enrollments.create') && (
-        <form className="card" action={add} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <form id="add" className="card" action={add} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <h2 style={{ marginBottom: 4 }}>Add a customer</h2>
             <p className="muted" style={{ margin: 0 }}>Does exactly what a purchase does: creates the customer, links them to the course, and makes their personal sign-up link. Use it for offline sales or to try the journey yourself.</p>
