@@ -20,3 +20,12 @@ export function coursesTabs(orgSlug: string, canEdit: boolean) {
     ...(canEdit ? [{ key: 'onboarding', href: `${base}/onboarding`, label: 'Onboarding forms' }] : []),
   ];
 }
+
+/** Growth: the weekly scorecard and the sales pipeline, each shown only to people who can use it. */
+export function growthTabs(orgSlug: string, canKpis: boolean, canSales: boolean) {
+  const base = `/w/${orgSlug}`;
+  return [
+    ...(canKpis ? [{ key: 'scorecard', href: `${base}/scorecard`, label: 'Weekly scorecard' }] : []),
+    ...(canSales ? [{ key: 'pipeline', href: `${base}/pipeline`, label: 'Sales pipeline' }] : []),
+  ];
+}
