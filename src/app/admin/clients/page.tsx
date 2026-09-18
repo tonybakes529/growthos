@@ -76,7 +76,6 @@ export default async function AdminClients({ searchParams }: { searchParams: Pro
     ...t.program.map((x) => ({ v: `program:${x.id}`, l: `Program: ${x.name}` })),
     ...t.scorecard.map((x) => ({ v: `scorecard:${x.id}`, l: `Scorecard: ${x.name}` })),
     ...t.dashboard.map((x) => ({ v: `dashboard:${x.id}`, l: `Dashboard: ${x.name}` })),
-    ...t.pipeline.map((x) => ({ v: `pipeline:${x.id}`, l: `Pipeline: ${x.name}` })),
     ...t.sop.map((x) => ({ v: `sop:${x.id}`, l: `SOP: ${x.name}` })),
     ...t.offer.map((x) => ({ v: `offer:${x.id}`, l: `Offer: ${x.name}` })),
     ...t.task.map((x) => ({ v: `task:${x.id}`, l: `Tasks: ${x.name}` })),

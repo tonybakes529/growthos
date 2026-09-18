@@ -83,3 +83,7 @@ details.edit > summary { cursor: pointer; color: var(--accent); font-weight: 600
 .timeline { list-style: none; margin: 0; padding: 0; } .timeline li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line2); }
 .timeline li.todo { color: var(--muted); }
 .answer { padding: 12px 0; border-bottom: 1px solid var(--line2); } .answer .a { margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+
+/* Lesson video embeds (Loom, YouTube, Tella) */
+.video { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; overflow: hidden; }
+.video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }

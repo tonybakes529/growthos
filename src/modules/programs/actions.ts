@@ -5,6 +5,7 @@ import { action, zId, zSlug } from '@/lib/action';
 import { requireOrg, assertCan, type OrgContext } from '@/lib/auth/context';
 import { requireSession } from '@/lib/auth/session';
 import { AppError, unwrap } from '@/lib/errors';
+import { parseVideoUrl } from './embeds';
 
 const zDrip = z.discriminatedUnion('type', [
   z.object({ type: z.literal('immediate') }),
@@ -167,7 +168,7 @@ export const createLesson = action(
 
 const zBlock = z.discriminatedUnion('blockType', [
   z.object({ blockType: z.literal('text'), content: z.object({ html: z.string().max(200_000) }) }),
-  z.object({ blockType: z.literal('video'), content: z.object({ provider: z.enum(['mux', 'vimeo', 'youtube', 'wistia', 'file']), playback_id: z.string().optional(), url: z.string().url().optional(), duration_s: z.number().optional() }) }),
+  z.object({ blockType: z.literal('video'), content: z.object({ provider: z.enum(['mux', 'vimeo', 'youtube', 'wistia', 'file', 'loom', 'tella']), playback_id: z.string().optional(), url: z.string().url().optional(), embed_url: z.string().url().optional(), duration_s: z.number().optional() }) }),
   z.object({ blockType: z.literal('audio'), content: z.object({ provider: z.string(), url: z.string().url().optional() }) }),
   z.object({ blockType: z.literal('document'), content: z.object({ label: z.string() }) }),
   z.object({ blockType: z.literal('download'), content: z.object({ label: z.string(), url: z.string().url().optional() }) }),
@@ -198,6 +199,14 @@ export const upsertLessonBlock = action(
     );
   },
 );
+
+/** A Loom, YouTube or Tella share link becomes a video block. The link is validated and normalised here, never trusted as pasted. */
+export const addVideoBlock = action(z.object({ orgSlug: zSlug, lessonId: zId, url: z.string().trim().max(500) }), async (i) => {
+  const parsed = parseVideoUrl(i.url);
+  if (!parsed) throw new AppError('validation', 'Paste a Loom, YouTube or Tella share link, for example https://www.loom.com/share/...');
+  return upsertLessonBlock({ orgSlug: i.orgSlug, lessonId: i.lessonId, blockType: 'video',
+    content: { provider: parsed.provider, playback_id: parsed.id, url: parsed.url, embed_url: parsed.embed_url } });
+});
 
 /** Drag-and-drop ordering for any level of the tree. */
 export const reorder = action(

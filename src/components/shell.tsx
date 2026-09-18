@@ -16,7 +16,6 @@ const NAV: { path: string; label: string; needs?: Permission }[] = [
   { path: '/automations', label: 'Automations', needs: 'automations.read' },
   { path: '/scorecard', label: 'Weekly Scorecard', needs: 'kpis.read' },
   { path: '/tasks', label: 'Tasks' },
-  { path: '/pipeline', label: 'Sales Pipeline', needs: 'sales.read' },
   { path: '/team', label: 'Team', needs: 'members.read' },
   { path: '/activity', label: 'Activity', needs: 'organization.read' },
 ];

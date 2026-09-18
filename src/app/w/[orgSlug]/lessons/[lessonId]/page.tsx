@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireOrgPage, can } from '@/lib/auth/context';
-import { getLesson, upsertLessonBlock } from '@/modules/programs/actions';
+import { getLesson, upsertLessonBlock, addVideoBlock } from '@/modules/programs/actions';
 import { completeLesson } from '@/modules/enrollments/actions';
 import { getQuiz, submitAssignment, submitQuizAttempt } from '@/modules/assignments/actions';
 import { done } from '@/components/flash';
@@ -41,6 +41,10 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
     done(path, await submitQuizAttempt({ quizId: String(form.get('quiz')), answers }),
       (d) => d.passed ? `Passed with ${d.score_percent}%` : `Scored ${d.score_percent}%. Try again.`);
   }
+  async function addVideo(form: FormData) {
+    'use server';
+    done(path, await addVideoBlock({ orgSlug, lessonId, url: String(form.get('url') ?? '') }), 'Video added');
+  }
   async function addText(form: FormData) {
     'use server';
     done(path, await upsertLessonBlock({ orgSlug, lessonId, blockType: 'text', content: { html: String(form.get('text')) } }), 'Content added');
@@ -61,7 +65,9 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
           return (
             <div key={b.id} className="block">
               {b.block_type === 'text' && <p style={{ whiteSpace: 'pre-wrap' }}>{(c.html ?? '').replace(/<[^>]+>/g, '')}</p>}
-              {b.block_type === 'video' && (c.url
+              {b.block_type === 'video' && (c.embed_url && /^https:\/\/(www\.)?(youtube-nocookie\.com|loom\.com|tella\.tv)\//.test(c.embed_url)
+                ? <div className="video"><iframe src={c.embed_url} title={`${c.provider} video`} allow="autoplay; fullscreen; picture-in-picture; clipboard-write" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" loading="lazy" /></div>
+                : c.url
                 ? <video src={c.url} controls style={{ width: '100%' }} />
                 : <div className="muted">Video ({c.provider}{c.playback_id ? `: ${c.playback_id}` : ''})</div>)}
               {b.block_type === 'embed' && <div className="muted">Embedded content: <a href={c.embed_url} target="_blank" rel="noreferrer">{c.embed_url}</a></div>}
@@ -72,12 +78,17 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
           );
         })}
         {!!resources.length && <><h3>Resources</h3>{resources.map((r) => <div key={r.id}><a href={r.url ?? '#'}>{r.title}</a></div>)}</>}
-        {can(ctx, 'programs.update') && (
+        {can(ctx, 'programs.update') && (<>
+          <form action={addVideo} style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
+            <label className="f" style={{ flex: 1, minWidth: 260 }}>Add a video <span className="muted" style={{ fontWeight: 400 }}>(Loom, YouTube or Tella share link)</span>
+              <input name="url" type="url" required placeholder="https://www.loom.com/share/…" /></label>
+            <button className="btn small" type="submit">Add video</button>
+          </form>
           <form action={addText} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <label className="f">Add text content<textarea name="text" required /></label>
             <div><button className="btn small">Add</button></div>
           </form>
-        )}
+        </>)}
       </div>
 
       {assignments.map((a) => {
