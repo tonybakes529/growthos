@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { action, zId, zSlug } from '@/lib/action';
 import { requireOrg, assertCan, can } from '@/lib/auth/context';
 import { AppError, unwrap, unwrapRequired } from '@/lib/errors';
+import { parseVideoUrl } from '@/modules/programs/embeds';
 
 // SOPs are the client team's playbook: how this business runs. Courses are what their customers learn.
 // Tables: standard_operating_procedures (the document) + sop_versions (every published body, newest is current).
@@ -17,7 +18,25 @@ const zMeta = z.object({
   department: z.string().trim().max(80).optional(),
   summary: z.string().trim().max(1000).optional(),
 });
-const zBody = z.object({ body: z.string().trim().min(1).max(100_000), changeNote: z.string().trim().max(500).optional() });
+const zBody = z.object({
+  body: z.string().trim().max(100_000).default(''),
+  // A Loom, YouTube or Tella share link. Stored as the first line of the body so it is versioned with the
+  // procedure and needs no schema change; the renderer turns any such line into an embedded player.
+  videoUrl: z.string().trim().max(500).optional(),
+  changeNote: z.string().trim().max(500).optional(),
+});
+
+function composeBody(i: { body: string; videoUrl?: string }): string {
+  let video: string | null = null;
+  if (i.videoUrl) {
+    const parsed = parseVideoUrl(i.videoUrl);
+    if (!parsed) throw new AppError('validation', 'Paste a Loom, YouTube or Tella share link, for example https://www.loom.com/share/...');
+    video = parsed.url;
+  }
+  const body = [video, i.body].filter(Boolean).join('\n\n');
+  if (!body) throw new AppError('validation', 'Add a video link or write the procedure, or both');
+  return body;
+}
 
 export const listSops = action(z.object({ orgSlug: zSlug }), async ({ orgSlug }) => {
   const ctx = await requireOrg(orgSlug);
@@ -49,10 +68,11 @@ export const getSop = action(z.object({ orgSlug: zSlug, sopId: zId }), async ({ 
 export const createSop = action(zMeta.merge(zBody).extend({ orgSlug: zSlug }), async (i) => {
   const ctx = await requireOrg(i.orgSlug);
   assertCan(ctx, 'sops.create');
+  const body = composeBody(i);
   const sop = unwrap(await ctx.sb.from('standard_operating_procedures')
     .insert({ organization_id: ctx.organizationId, title: i.title, department: i.department || null, summary: i.summary || null,
       status: 'active', owner_id: ctx.ctx.effective_user_id }).select('id').single());
-  const v = await ctx.sb.from('sop_versions').insert({ organization_id: ctx.organizationId, sop_id: sop.id, version: 1, body: i.body, change_note: i.changeNote || null }).select('id').single();
+  const v = await ctx.sb.from('sop_versions').insert({ organization_id: ctx.organizationId, sop_id: sop.id, version: 1, body, change_note: i.changeNote || null }).select('id').single();
   if (v.error) { await ctx.sb.from('standard_operating_procedures').delete().eq('id', sop.id); unwrap(v); }
   unwrap(await ctx.sb.from('standard_operating_procedures').update({ current_version_id: v.data!.id }).eq('id', sop.id).select('id').single());
   return { sopId: sop.id };
@@ -75,10 +95,11 @@ export const updateSopMeta = action(zMeta.partial().extend({ orgSlug: zSlug, sop
 export const publishSopVersion = action(zBody.extend({ orgSlug: zSlug, sopId: zId }), async (i) => {
   const ctx = await requireOrg(i.orgSlug);
   assertCan(ctx, 'sops.update');
+  const body = composeBody(i);
   const latest = unwrap(await ctx.sb.from('sop_versions').select('version').eq('sop_id', i.sopId).eq('organization_id', ctx.organizationId)
     .order('version', { ascending: false }).limit(1).maybeSingle());
   const v = unwrap(await ctx.sb.from('sop_versions').insert({
-    organization_id: ctx.organizationId, sop_id: i.sopId, version: (latest?.version ?? 0) + 1, body: i.body, change_note: i.changeNote || null,
+    organization_id: ctx.organizationId, sop_id: i.sopId, version: (latest?.version ?? 0) + 1, body, change_note: i.changeNote || null,
   }).select('id, version').single());
   unwrap(await ctx.sb.from('standard_operating_procedures').update({ current_version_id: v.id, last_reviewed_at: new Date().toISOString() })
     .eq('id', i.sopId).eq('organization_id', ctx.organizationId).select('id').single());

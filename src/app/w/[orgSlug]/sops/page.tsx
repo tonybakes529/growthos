@@ -5,6 +5,7 @@ import { createSop, listSops, listSopTemplates } from '@/modules/sops/actions';
 import { applyTemplate } from '@/modules/templates/actions';
 import { done } from '@/components/flash';
 import { Flash, PageHead, Pill, day } from '@/components/ui';
+import { Modal } from '@/components/modal';
 
 /** The team's playbook. Clients write their own; the operator can also drop in SOPs from the Growth OS library. */
 export default async function Sops({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams: Promise<{ q?: string; msg?: string; err?: string }> }) {
@@ -27,7 +28,7 @@ export default async function Sops({ params, searchParams }: { params: Promise<{
   async function create(form: FormData) {
     'use server';
     const r = await createSop({ orgSlug, title: String(form.get('title') ?? ''), department: String(form.get('department') ?? ''),
-      summary: String(form.get('summary') ?? ''), body: String(form.get('body') ?? '') });
+      summary: String(form.get('summary') ?? ''), videoUrl: String(form.get('video') ?? '') || undefined, body: String(form.get('body') ?? '') });
     if (!r.ok) redirect(`${path}?err=${encodeURIComponent(r.error.message)}`);
     redirect(`${path}/${r.data.sopId}?msg=${encodeURIComponent('SOP created')}`);
   }
@@ -39,7 +40,35 @@ export default async function Sops({ params, searchParams }: { params: Promise<{
   return (
     <>
       <PageHead sub={ctx.name} title="SOPs">
-        {can(ctx, 'sops.create') && <a className="btn primary" href="#new">+ New SOP</a>}
+        {library.length > 0 && can(ctx, 'sops.create') && (
+          <Modal label="Add from Growth OS library" title="Add from the Growth OS library">
+            <form action={addFromLibrary}>
+              <p className="muted" style={{ margin: 0 }}>Copies the SOP into this workspace. The client can then edit their copy freely.</p>
+              <label className="f">Library SOP
+                <select name="template" required>
+                  {library.map((t) => <option key={t.id} value={t.id}>{t.name}{t.category ? ` (${t.category})` : ''}{alreadyIn.has(t.id) ? ' · already added' : ''}</option>)}
+                </select></label>
+              <div><button className="btn primary" type="submit">Add to workspace</button></div>
+            </form>
+          </Modal>
+        )}
+        {can(ctx, 'sops.create') && (
+          <Modal label="+ New SOP" title="New SOP" primary open={!!sp.err}>
+            <form action={create}>
+              <label className="f">Title<input name="title" required maxLength={200} placeholder="How we onboard a new customer" autoFocus /></label>
+              <label className="f">Department
+                <input name="department" maxLength={80} placeholder="Sales, Delivery, Marketing…" list="departments" />
+                <datalist id="departments">{departments.filter((d) => d !== 'General').map((d) => <option key={d} value={d} />)}</datalist></label>
+              <label className="f">Loom video <span className="muted" style={{ fontWeight: 400 }}>(optional, YouTube and Tella work too)</span>
+                <input name="video" type="url" placeholder="https://www.loom.com/share/…" /></label>
+              <label className="f">Written steps <span className="muted" style={{ fontWeight: 400 }}>(optional if there is a video)</span>
+                <textarea name="body" rows={6} maxLength={100000} placeholder={'1. First step\n2. Second step'} />
+                <span className="qhelp">Lines starting with # become headings, 1. or - become lists.</span></label>
+              <label className="f">One-line summary <span className="muted" style={{ fontWeight: 400 }}>(optional)</span><input name="summary" maxLength={1000} /></label>
+              <div><button className="btn primary" type="submit">Create SOP</button></div>
+            </form>
+          </Modal>
+        )}
       </PageHead>
       <Flash msg={sp.msg} err={sp.err ?? (res.ok ? undefined : `Could not load SOPs: ${res.error.message}`)} />
       <p className="muted" style={{ margin: 0, maxWidth: 720 }}>
@@ -51,7 +80,7 @@ export default async function Sops({ params, searchParams }: { params: Promise<{
       )}
 
       {res.ok && !live.length && (
-        <div className="card empty">{q ? 'No SOPs match your search.' : 'No SOPs yet. Write the first one below, or add one from the Growth OS library.'}</div>
+        <div className="card empty">{q ? 'No SOPs match your search.' : 'No SOPs yet. Use "New SOP" to write the first one, or add one from the Growth OS library.'}</div>
       )}
       {departments.map((dept) => (
         <div className="card" key={dept}>
@@ -77,34 +106,6 @@ export default async function Sops({ params, searchParams }: { params: Promise<{
         </details>
       )}
 
-      {library.length > 0 && can(ctx, 'sops.create') && (
-        <form className="card" action={addFromLibrary} style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
-          <div style={{ flexBasis: '100%' }}><h2 style={{ marginBottom: 2 }}>Add from the Growth OS library</h2>
-            <p className="muted" style={{ margin: 0 }}>Copies the SOP into this workspace. The client can then edit their copy freely.</p></div>
-          <label className="f" style={{ flex: 1, minWidth: 260 }}>Library SOP
-            <select name="template" required>
-              {library.map((t) => <option key={t.id} value={t.id}>{t.name}{t.category ? ` (${t.category})` : ''}{alreadyIn.has(t.id) ? ' · already added' : ''}</option>)}
-            </select></label>
-          <button className="btn" type="submit">Add to workspace</button>
-        </form>
-      )}
-
-      {can(ctx, 'sops.create') && (
-        <form id="new" className="card" action={create} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <h2 style={{ margin: 0 }}>New SOP</h2>
-          <div className="row" style={{ alignItems: 'end' }}>
-            <label className="f" style={{ flex: 2, minWidth: 240 }}>Title<input name="title" required maxLength={200} placeholder="How we onboard a new customer" /></label>
-            <label className="f" style={{ flex: 1, minWidth: 160 }}>Department <span className="muted" style={{ fontWeight: 400 }}>(optional)</span>
-              <input name="department" maxLength={80} placeholder="Sales, Delivery, Marketing…" list="departments" />
-              <datalist id="departments">{departments.filter((d) => d !== 'General').map((d) => <option key={d} value={d} />)}</datalist></label>
-          </div>
-          <label className="f">One-line summary <span className="muted" style={{ fontWeight: 400 }}>(optional)</span><input name="summary" maxLength={1000} /></label>
-          <label className="f">Procedure
-            <textarea name="body" required rows={10} maxLength={100000} placeholder={'# Purpose\nWhy this exists.\n\n# Steps\n1. First step\n2. Second step\n\n# Notes\n- Anything the team should know'} />
-            <span className="qhelp">Plain text. Lines starting with # become headings, 1. or - become lists.</span></label>
-          <div><button className="btn primary" type="submit">Create SOP</button></div>
-        </form>
-      )}
     </>
   );
 }

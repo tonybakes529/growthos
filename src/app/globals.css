@@ -125,3 +125,10 @@ details.edit > summary { cursor: pointer; color: var(--accent); font-weight: 600
 .sopbody h2 { font-size: 17px; margin: 16px 0 6px; } .sopbody h3 { font-size: 14px; margin: 12px 0 4px; color: var(--ink); }
 .sopbody p { margin: 6px 0; line-height: 1.55; } .sopbody ul, .sopbody ol { margin: 6px 0 10px; padding-left: 22px; line-height: 1.55; }
 .sopsteps { margin: 0 0 14px; padding-left: 22px; } .sopsteps li { padding: 4px 0; }
+
+/* Centred dialogs for "add new" forms */
+dialog.modal { border: 0; border-radius: 10px; padding: 0; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); background: var(--card); color: var(--ink); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+dialog.modal::backdrop { background: rgba(28,28,26,.45); }
+dialog.modal .modal-body { padding: 20px; overflow-y: auto; max-height: calc(100vh - 32px); display: flex; flex-direction: column; gap: 10px; }
+dialog.modal form { display: flex; flex-direction: column; gap: 10px; }
+dialog.modal textarea { min-height: 120px; }

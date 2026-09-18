@@ -18,11 +18,16 @@ export default async function SopPage({ params, searchParams }: { params: Promis
   const path = `${list}/${sopId}`;
   const shown = (sp.v && versions.find((x) => String(x.version) === sp.v)) || current;
   const edit = can(ctx, 'sops.update');
+  // The editor shows the video link in its own field; the first line of the body holds it when present.
+  const rawBody = (current?.body ?? '').replace(/\\n/g, '\n');
+  const firstLine = rawBody.split('\n')[0]?.trim() ?? '';
+  const videoLine = /^https?:\/\/\S+$/.test(firstLine) ? firstLine : null;
+  const bodyText = videoLine ? rawBody.split('\n').slice(1).join('\n').replace(/^\n+/, '') : rawBody;
   const due = sop.review_every_days && sop.last_reviewed_at && Date.now() - Date.parse(sop.last_reviewed_at) > sop.review_every_days * 864e5;
 
   async function publish(form: FormData) {
     'use server';
-    done(path, await publishSopVersion({ orgSlug, sopId, body: String(form.get('body') ?? ''), changeNote: String(form.get('note') ?? '') }), (d) => `Version ${d.version} published`);
+    done(path, await publishSopVersion({ orgSlug, sopId, body: String(form.get('body') ?? ''), videoUrl: String(form.get('video') ?? '') || undefined, changeNote: String(form.get('note') ?? '') }), (d) => `Version ${d.version} published`);
   }
   async function meta(form: FormData) {
     'use server';
@@ -89,7 +94,10 @@ export default async function SopPage({ params, searchParams }: { params: Promis
           {edit && (<>
             <form className="card" action={publish} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div><h2 style={{ marginBottom: 2 }}>Edit procedure</h2><p className="muted" style={{ margin: 0 }}>Saving publishes a new version. Earlier versions stay in the history.</p></div>
-              <textarea name="body" required rows={14} maxLength={100000} defaultValue={(current?.body ?? '').replace(/\\n/g, '\n')} />
+              <label className="f">Loom video <span className="muted" style={{ fontWeight: 400 }}>(optional, YouTube and Tella work too)</span>
+                <input name="video" type="url" defaultValue={videoLine ?? ''} placeholder="https://www.loom.com/share/…" /></label>
+              <label className="f">Written steps
+                <textarea name="body" rows={14} maxLength={100000} defaultValue={bodyText} /></label>
               <label className="f">What changed <span className="muted" style={{ fontWeight: 400 }}>(optional)</span><input name="note" maxLength={500} /></label>
               <div><button className="btn primary" type="submit">Publish new version</button></div>
             </form>

@@ -212,7 +212,7 @@ async function TeamHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?
   return (
     <>
       <PageHead sub={ctx.name} title="Home">
-        {seeCustomers && can(ctx, 'enrollments.create') && <Link className="btn" href={`${path}/customers#add`}>Add customer</Link>}
+        {seeCustomers && can(ctx, 'enrollments.create') && <Link className="btn" href={`${path}/customers?add=1`}>Add customer</Link>}
         {scorecardDue && can(ctx, 'kpis.create') && <Link className="btn primary" href={`${path}/scorecard?week=${week}`}>Submit scorecard</Link>}
       </PageHead>
       <Flash msg={sp.msg} err={sp.err} />
