@@ -12,7 +12,8 @@
     "db:docs": "python3 scripts/gen-data-model.py",
     "db:types": "python3 scripts/gen-types.py > src/lib/supabase/database.types.ts",
     "db:reset": "supabase db reset",
-    "worker:events": "tsx --conditions react-server scripts/run-worker.ts"
+    "worker:events": "tsx --conditions react-server scripts/run-worker.ts",
+    "test:calc": "tsx scripts/test-calculator.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

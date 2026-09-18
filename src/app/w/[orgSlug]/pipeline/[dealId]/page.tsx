@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireOrgPage, can } from '@/lib/auth/context';
 import { CALL_OUTCOMES, CALL_OUTCOME_LABEL, NOTE_TYPES, createOffer, getDeal, logSalesCall, moveOpportunity, saveCallSheet, updateDeal } from '@/modules/sales/actions';
-import { SheetInputs, sheetValuesFromForm } from '@/modules/sales/sheet';
+import { SheetSections, sheetValuesFromForm } from '@/modules/sales/sheet';
+import { CALCULATOR_KEYS } from '@/modules/sales/calculator';
+import { RevenueCalculator } from '@/components/revenue-calculator';
 import { parseVideoUrl } from '@/modules/programs/embeds';
 import { done } from '@/components/flash';
 import { Modal } from '@/components/modal';
@@ -21,7 +23,7 @@ export default async function Deal({ params, searchParams }: { params: Promise<{
   if (!can(ctx, 'sales.read')) notFound();
   const res = await getDeal({ orgSlug, dealId });
   if (!res.ok) notFound();
-  const { deal, contact, stages, offers, fields, values, calls, notes } = res.data;
+  const { deal, contact, stages, offers, fields, values, calls, notes, config } = res.data;
   const board = `/w/${orgSlug}/pipeline`;
   const path = `${board}/${dealId}`;
   const edit = can(ctx, 'sales.update');
@@ -29,6 +31,11 @@ export default async function Deal({ params, searchParams }: { params: Promise<{
   const offerName = (id: string | null) => offers.find((o) => o.id === id)?.name ?? null;
   const answered = fields.filter((f) => values[f.id] != null).length;
   const sheetFields = fields.map((f) => ({ id: f.id, field_type: f.field_type }));
+  const idOf = (key: string) => fields.find((f) => f.key === key)?.id;
+  const calc = config.calculator?.enabled ? config.calculator : null;
+  const calcInputs = { leadsPerMonth: idOf(CALCULATOR_KEYS.leadsPerMonth), closeRate: idOf(CALCULATOR_KEYS.closeRate), avgJob: idOf(CALCULATOR_KEYS.avgJob), hoursPerWeek: idOf(CALCULATOR_KEYS.hoursPerWeek) };
+  // if the workspace has no section flagged for it, show the calculator after the sheet instead of hiding it
+  const calcPlaced = config.sections.some((s) => s.calculator);
 
   async function save(f: FormData) {
     'use server';
@@ -92,16 +99,18 @@ export default async function Deal({ params, searchParams }: { params: Promise<{
 
       <div className="grid builder">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <form className="card" action={sheet} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <form id="callsheet" action={sheet} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <h2 style={{ margin: 0 }}>Call sheet {fields.length > 0 && <span className="muted" style={{ fontWeight: 400 }}>({answered} of {fields.length} filled)</span>}</h2>
-              {can(ctx, 'custom_fields.update') && <Link href={`${board}/sheet`}>Edit the questions</Link>}
+              {can(ctx, 'custom_fields.update') && <Link href={`${board}/sheet`}>Edit call sheet</Link>}
             </div>
             {!fields.length ? (
-              <p className="empty">No call sheet yet. {can(ctx, 'custom_fields.create') ? <><Link href={`${board}/sheet`}>Set up the questions</Link> your reps answer on every deal.</> : 'Your admin sets up the questions reps answer on every deal.'}</p>
+              <p className="card empty">No call sheet yet. {can(ctx, 'custom_fields.create') ? <><Link href={`${board}/sheet`}>Set it up</Link>: load the discovery call template or write your own questions.</> : 'Your admin sets up the questions reps answer on every deal.'}</p>
             ) : (<>
-              <SheetInputs fields={fields} values={values} disabled={!edit} />
-              {edit && <div><button className="btn primary" type="submit">Save call sheet</button></div>}
+              <SheetSections fields={fields} sections={config.sections} values={values} disabled={!edit}
+                calculator={calc && <RevenueCalculator formId="callsheet" inputs={calcInputs} presets={calc} />} />
+              {calc && !calcPlaced && <RevenueCalculator formId="callsheet" inputs={calcInputs} presets={calc} />}
+              {edit && <div className="savebar"><button className="btn primary" type="submit">Save call sheet</button><span className="muted">Saves every answer, including the four calculator numbers.</span></div>}
             </>)}
           </form>
 

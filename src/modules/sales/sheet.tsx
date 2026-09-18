@@ -1,4 +1,5 @@
-import type { SheetField } from './actions';
+import type { ReactNode } from 'react';
+import type { SheetField, SheetSection } from './actions';
 
 export const SHEET_TYPE_LABEL: Record<SheetField['field_type'], string> = {
   text: 'Short text', long_text: 'Long text', number: 'Number', currency: 'Money ($)', date: 'Date', boolean: 'Yes / no',
@@ -48,5 +49,42 @@ export function SheetInputs({ fields, values = {}, disabled }: { fields: SheetFi
         return <label className="f" key={f.id}>{label}<input name={name} type={type} step={type === 'number' ? 'any' : undefined} defaultValue={shown} disabled={disabled} /></label>;
       })}
     </div>
+  );
+}
+
+/** Splits the flat question list into the workspace's sections, in section order; anything unplaced lands in "Other questions". */
+export function groupBySection(fields: SheetField[], sections: SheetSection[]) {
+  const byKey = new Map(fields.map((f) => [f.key, f]));
+  const placed = new Set<string>();
+  const groups = sections.map((s) => {
+    const fs = s.keys.map((k) => byKey.get(k)).filter((f): f is SheetField => !!f);
+    fs.forEach((f) => placed.add(f.key));
+    return { section: s, fields: fs };
+  });
+  const loose = fields.filter((f) => !placed.has(f.key));
+  if (loose.length) groups.push({ section: { id: '_other', title: sections.length ? 'Other questions' : 'Questions', keys: loose.map((f) => f.key) }, fields: loose });
+  return groups;
+}
+
+/** The whole call sheet as the rep works through it: talk-track, then the questions, section by section. */
+export function SheetSections({ fields, sections, values = {}, disabled, calculator }: {
+  fields: SheetField[]; sections: SheetSection[]; values?: Record<string, unknown>; disabled?: boolean; calculator?: ReactNode;
+}) {
+  return (
+    <>
+      {groupBySection(fields, sections).map(({ section, fields: fs }, n) => {
+        const filled = fs.filter((f) => values[f.id] != null).length;
+        return (
+          <details className="section" key={section.id} open={n < 2 || filled > 0}>
+            <summary><span>{section.title}</span>{fs.length > 0 && <span className="muted" style={{ fontWeight: 400 }}>{filled} of {fs.length}</span>}</summary>
+            <div className="inner">
+              {section.script && <div className="script"><div className="k">Say</div>{section.script}</div>}
+              {fs.length > 0 && <SheetInputs fields={fs} values={values} disabled={disabled} />}
+              {section.calculator && calculator}
+            </div>
+          </details>
+        );
+      })}
+    </>
   );
 }

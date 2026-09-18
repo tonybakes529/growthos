@@ -132,3 +132,23 @@ dialog.modal::backdrop { background: rgba(28,28,26,.45); }
 dialog.modal .modal-body { padding: 20px; overflow-y: auto; max-height: calc(100vh - 32px); display: flex; flex-direction: column; gap: 10px; }
 dialog.modal form { display: flex; flex-direction: column; gap: 10px; }
 dialog.modal textarea { min-height: 120px; }
+
+/* Call sheet sections and the revenue calculator */
+details.section { border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+details.section > summary { cursor: pointer; padding: 12px 16px; font-weight: 700; display: flex; justify-content: space-between; gap: 8px; list-style: none; }
+details.section > summary::-webkit-details-marker { display: none; }
+details.section[open] > summary { border-bottom: 1px solid var(--line2); }
+details.section > .inner { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+.script { border-left: 4px solid var(--accent); background: var(--accent-bg); padding: 10px 14px; border-radius: 6px; white-space: pre-wrap; line-height: 1.5; }
+.script .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-2); font-weight: 700; margin-bottom: 4px; }
+.calc { border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px; background: #fbfbfa; }
+.calc .k { font-size: 12px; color: var(--muted); } .calc .s { font-size: 12px; color: var(--muted); }
+.calc-hero { text-align: center; padding: 6px 0 2px; } .calc-hero .v { font-size: 40px; font-weight: 800; color: var(--red); line-height: 1.1; }
+.calc-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .calc-row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.calc-row > div { background: var(--card); border: 1px solid var(--line2); border-radius: 6px; padding: 10px; }
+.calc .n { font-size: 22px; font-weight: 700; } .calc .good { color: var(--green); } .calc .bad { color: var(--red); }
+.calc-leaks { display: flex; flex-direction: column; gap: 6px; }
+.leak { display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 8px 10px; background: var(--card); border: 1px solid var(--line2); border-radius: 6px; font-size: 13px; }
+.leak .amt { font-weight: 700; color: var(--red); white-space: nowrap; } .leak .amt.good { color: var(--green); }
+@media (max-width: 560px) { .leak { grid-template-columns: 1fr; } .calc-row.three { grid-template-columns: 1fr; } .calc-hero .v { font-size: 32px; } }
+.savebar { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; display: flex; gap: 10px; align-items: center; z-index: 2; }
