@@ -5,7 +5,7 @@ export const SOFT_DELETE_TABLES = [
   'session_notes', 'call_recordings', 'action_items', 'client_wins', 'client_blockers', 'milestones', 'goals',
   'kpi_definitions', 'quarterly_goals', 'scorecards', 'dashboards', 'growth_projects', 'experiments', 'tasks',
   'task_comments', 'standard_operating_procedures', 'meeting_agendas', 'meeting_notes', 'decisions', 'pipelines',
-  'leads', 'opportunities', 'appointments', 'sales_calls', 'sales_notes', 'lead_magnets', 'content_ideas',
+  'leads', 'opportunities', 'appointments', 'sales_calls', 'sales_notes', 'setter_assets', 'lead_magnets', 'content_ideas',
   'content_items', 'scripts', 'announcements', 'discussions', 'discussion_comments', 'direct_messages', 'automations',
   'webhook_endpoints',
 ] as const;

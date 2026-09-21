@@ -814,6 +814,12 @@ export type Database = {
         Update: { id?: string; organization_id?: string; coaching_session_id?: string; author_id?: string | null; visibility?: string; body?: string; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
         Relationships: [];
       };
+      setter_assets: {
+        Row: { id: string; organization_id: string; title: string; category: string | null; description: string | null; file_id: string | null; links: Json; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null };
+        Insert: { id?: string; organization_id: string; title: string; category?: string | null; description?: string | null; file_id?: string | null; links?: Json; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Update: { id?: string; organization_id?: string; title?: string; category?: string | null; description?: string | null; file_id?: string | null; links?: Json; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Relationships: [];
+      };
       setters: {
         Row: { id: string; organization_id: string; user_id: string | null; display_name: string; commission_type: string; commission_rate: number | null; commission_flat_cents: number | null; is_active: boolean; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null };
         Insert: { id?: string; organization_id: string; user_id?: string | null; display_name: string; commission_type?: string; commission_rate?: number | null; commission_flat_cents?: number | null; is_active?: boolean; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };

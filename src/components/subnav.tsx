@@ -21,11 +21,14 @@ export function coursesTabs(orgSlug: string, canEdit: boolean) {
   ];
 }
 
-/** Growth: the weekly scorecard and the sales pipeline, each shown only to people who can use it. */
+/** Growth: the weekly scorecard, the sales pipeline and the setters' assets, each shown only to people who can use it. */
 export function growthTabs(orgSlug: string, canKpis: boolean, canSales: boolean) {
   const base = `/w/${orgSlug}`;
   return [
     ...(canKpis ? [{ key: 'scorecard', href: `${base}/scorecard`, label: 'Weekly scorecard' }] : []),
-    ...(canSales ? [{ key: 'pipeline', href: `${base}/pipeline`, label: 'Sales pipeline' }] : []),
+    ...(canSales ? [
+      { key: 'pipeline', href: `${base}/pipeline`, label: 'Sales pipeline' },
+      { key: 'assets', href: `${base}/setter-assets`, label: 'Setter assets' },
+    ] : []),
   ];
 }

@@ -78,6 +78,8 @@ export default async function Deal({ params, searchParams }: { params: Promise<{
       <PageHead sub={`${ctx.name} · ${stage?.name ?? 'Deal'}`} title={deal.title}>
         <Pill value={deal.status} />
         <span style={{ fontWeight: 700, fontSize: 18 }}>{money(deal.value_cents)}</span>
+        {/* a new tab, so the call sheet stays open while the setter grabs a case study or link */}
+        <Link className="btn" href={`/w/${orgSlug}/setter-assets`} target="_blank" rel="noopener">Setter assets ↗</Link>
         {can(ctx, 'sales.create') && (
           <Modal label="+ Log a call" title="Log a sales call" primary open={!!sp.err}>
             <form action={logCall}>
