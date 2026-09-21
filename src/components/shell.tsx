@@ -17,9 +17,9 @@ const MAIN: Def[] = [
   { path: '/customers', label: 'Customers', needs: 'enrollments.read' },
   { path: '/programs', label: 'Courses', also: ['/lessons', '/onboarding'] },
   { path: '/sops', label: 'SOPs', needs: 'sops.read' },
-  { path: '/scorecard', label: 'Growth', needs: 'kpis.read', also: ['/pipeline'] },
+  { path: '/scorecard', label: 'Growth', needs: 'kpis.read', also: ['/pipeline', '/setter-assets'] },
   // people with sales access but no KPI access still reach Growth, landing on the pipeline
-  { path: '/pipeline', label: 'Growth', needs: 'sales.read', unless: 'kpis.read' },
+  { path: '/pipeline', label: 'Growth', needs: 'sales.read', unless: 'kpis.read', also: ['/setter-assets'] },
   { path: '/tasks', label: 'Tasks' },
 ];
 const MANAGE: Def[] = [
