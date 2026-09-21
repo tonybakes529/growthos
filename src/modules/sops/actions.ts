@@ -41,27 +41,44 @@ function composeBody(i: { body: string; videoUrl?: string }): string {
 export const listSops = action(z.object({ orgSlug: zSlug }), async ({ orgSlug }) => {
   const ctx = await requireOrg(orgSlug);
   assertCan(ctx, 'sops.read');
+  // the owner's name rides along (this used to be a second round of queries)
   const rows = unwrap(await ctx.sb.from('standard_operating_procedures')
-    .select('id, title, department, summary, status, current_version_id, owner_id, source_template_id, last_reviewed_at, updated_at')
-    .eq('organization_id', ctx.organizationId).is('deleted_at', null).order('department', { nullsFirst: false }).order('title'));
-  const ownerIds = [...new Set(rows.map((r) => r.owner_id).filter((v): v is string => !!v))];
-  const owners = ownerIds.length ? unwrap(await ctx.sb.from('user_profiles').select('user_id, display_name').in('user_id', ownerIds)) : [];
-  return rows.map((r) => ({ ...r, owner: owners.find((o) => o.user_id === r.owner_id)?.display_name ?? null }));
+    .select('id, title, department, summary, status, current_version_id, owner_id, source_template_id, last_reviewed_at, updated_at, owner_user:users!standard_operating_procedures_owner_id_fkey(profile:user_profiles!user_profiles_user_id_fkey(display_name))')
+    .eq('organization_id', ctx.organizationId).is('deleted_at', null).order('department', { nullsFirst: false }).order('title')
+    .overrideTypes<{ id: string; title: string; department: string | null; summary: string | null; status: string; current_version_id: string | null;
+      owner_id: string | null; source_template_id: string | null; last_reviewed_at: string | null; updated_at: string;
+      owner_user: { profile: { display_name: string | null } | null } | null }[], { merge: false }>());
+  return rows.map(({ owner_user, ...r }) => ({ ...r, owner: owner_user?.profile?.display_name ?? null }));
 });
 
-export const getSop = action(z.object({ orgSlug: zSlug, sopId: zId }), async ({ orgSlug, sopId }) => {
+const VERSION_FULL = 'id, version, body, steps, change_note, created_at, created_by';
+type SopVersion = { id: string; version: number; body: string; steps: unknown; change_note: string | null; created_at: string; created_by: string | null };
+
+/**
+ * An SOP with its version history. Only two versions carry their text: the current one and, when `version` is
+ * given, the one being viewed. This used to download the full text of every version ever saved.
+ */
+export const getSop = action(z.object({ orgSlug: zSlug, sopId: zId, version: z.number().int().positive().optional() }), async ({ orgSlug, sopId, version }) => {
   const ctx = await requireOrg(orgSlug);
   assertCan(ctx, 'sops.read');
-  const [sop, versions] = await Promise.all([
+  const org = ctx.organizationId;
+  const [sop, versions, picked] = await Promise.all([
     ctx.sb.from('standard_operating_procedures')
-      .select('id, title, department, summary, status, current_version_id, owner_id, source_template_id, review_every_days, last_reviewed_at, updated_at')
-      .eq('id', sopId).eq('organization_id', ctx.organizationId).is('deleted_at', null).maybeSingle(),
-    ctx.sb.from('sop_versions').select('id, version, body, steps, change_note, created_at, created_by')
-      .eq('sop_id', sopId).eq('organization_id', ctx.organizationId).order('version', { ascending: false }),
+      .select(`id, title, department, summary, status, current_version_id, owner_id, source_template_id, review_every_days, last_reviewed_at, updated_at, current:sop_versions!sop_current_version_fk(${VERSION_FULL})`)
+      .eq('id', sopId).eq('organization_id', org).is('deleted_at', null).maybeSingle()
+      .overrideTypes<{ id: string; title: string; department: string | null; summary: string | null; status: string; current_version_id: string | null;
+        owner_id: string | null; source_template_id: string | null; review_every_days: number | null; last_reviewed_at: string | null; updated_at: string;
+        current: SopVersion | null }, { merge: false }>(),
+    ctx.sb.from('sop_versions').select('id, version, change_note, created_at, created_by')
+      .eq('sop_id', sopId).eq('organization_id', org).order('version', { ascending: false }),
+    version ? ctx.sb.from('sop_versions').select(VERSION_FULL).eq('sop_id', sopId).eq('organization_id', org).eq('version', version).maybeSingle() : null,
   ]);
-  const s = unwrapRequired(sop, 'SOP');
+  const { current: cur, ...s } = unwrapRequired(sop, 'SOP');
   const vs = unwrap(versions);
-  return { sop: s, versions: vs, current: vs.find((v) => v.id === s.current_version_id) ?? vs[0] ?? null };
+  // An SOP always points at its current version; if it somehow does not, fall back to the latest, as before.
+  const current: SopVersion | null = cur
+    ?? (vs[0] ? unwrap(await ctx.sb.from('sop_versions').select(VERSION_FULL).eq('id', vs[0].id).single()) as SopVersion : null);
+  return { sop: s, versions: vs, current, shown: (picked ? (unwrap(picked) as SopVersion | null) : null) ?? current };
 });
 
 /** Create the document and its first version together; a document with no body is useless, so undo on failure. */

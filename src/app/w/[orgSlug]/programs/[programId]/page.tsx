@@ -18,21 +18,32 @@ export default async function ProgramPage({ params, searchParams }: { params: Pr
   const ctx = await requireOrgPage(orgSlug);
   const path = `/w/${orgSlug}/programs/${programId}`;
   const builder = can(ctx, 'programs.update');
-  const program = unwrap(await ctx.sb.from('programs').select('id, title, subtitle, description, status, onboarding_form_id, external_product_id').eq('id', programId).maybeSingle());
-  const [outline, report, members, forms, customers, entitlements] = await Promise.all([
+  const seeCustomers = can(ctx, 'enrollments.read');
+  // customer numbers for this course, counted in the database instead of downloading every customer record
+  const countCustomers = (statuses?: string[]) => {
+    const q = ctx.sb.from('customer_onboardings').select('id', { count: 'exact', head: true })
+      .eq('program_id', programId).eq('organization_id', ctx.organizationId);
+    return statuses ? q.in('status', statuses) : q;
+  };
+  // Everything loads in one round: nothing here depends on the course row, only on the id in the URL.
+  // Stripe identifiers live on the offer that sells this course and ride along with the entitlement.
+  const [programRes, outline, report, members, forms, entitlements, ...customerCounts] = await Promise.all([
+    ctx.sb.from('programs').select('id, title, subtitle, description, status, onboarding_form_id, external_product_id').eq('id', programId).maybeSingle(),
     getProgramOutline({ programId }),
-    can(ctx, 'enrollments.read') ? getProgressReport({ orgSlug, programId }) : null,
+    seeCustomers ? getProgressReport({ orgSlug, programId }) : null,
     can(ctx, 'enrollments.create') ? listMembers({ orgSlug }) : null,
     builder ? ctx.sb.from('onboarding_forms').select('id, name, status').eq('organization_id', ctx.organizationId).is('deleted_at', null).order('name') : null,
-    can(ctx, 'enrollments.read') ? ctx.sb.from('customer_onboardings').select('status').eq('program_id', programId).eq('organization_id', ctx.organizationId) : null,
-    builder && can(ctx, 'offers.read') ? ctx.sb.from('offer_entitlements').select('offer_id').eq('program_id', programId).eq('organization_id', ctx.organizationId) : null,
+    builder && can(ctx, 'offers.read')
+      ? ctx.sb.from('offer_entitlements')
+          .select('offer:offers!offer_entitlements_organization_id_offer_id_fkey(id, name, stripe_product_id, prices:pricing_options!pricing_options_organization_id_offer_id_fkey(stripe_price_id))')
+          .eq('program_id', programId).eq('organization_id', ctx.organizationId)
+          .overrideTypes<{ offer: { id: string; name: string; stripe_product_id: string | null; prices: { stripe_price_id: string | null }[] } | null }[], { merge: false }>()
+      : null,
+    ...(seeCustomers ? [countCustomers(), countCustomers(['invited']), countCustomers(['registered', 'in_progress']), countCustomers(['completed'])] : []),
   ]);
-  // Stripe identifiers live on the offer that sells this course; shown here read-only so the link is visible
-  const offerIds = (entitlements?.data ?? []).map((e) => e.offer_id);
-  const [offers, prices] = offerIds.length ? await Promise.all([
-    ctx.sb.from('offers').select('id, name, stripe_product_id').in('id', offerIds),
-    ctx.sb.from('pricing_options').select('offer_id, stripe_price_id').in('offer_id', offerIds).not('stripe_price_id', 'is', null),
-  ]) : [null, null];
+  const program = unwrap(programRes);
+  const offers = (entitlements?.data ?? []).flatMap((e) => (e.offer ? [e.offer] : []));
+  const [customerTotal, customersInvited, customersUnfinished, customersDone] = customerCounts.map((r) => r?.count ?? 0);
   const lessons = outline.ok ? outline.data.sections.flatMap((s) => s.modules.flatMap((m) => m.lessons)) : [];
   const doneCount = lessons.filter((l) => l.progress === 'completed').length;
   const pct = lessons.length ? Math.round((100 * doneCount) / lessons.length) : 0;
@@ -151,13 +162,13 @@ export default async function ProgramPage({ params, searchParams }: { params: Pr
             </div>
           )}
 
-          {customers?.data && (
+          {seeCustomers && (
             <div className="card">
-              <h2>Customers ({customers.data.length})</h2>
+              <h2>Customers ({customerTotal})</h2>
               <ul className="plain">
-                <li><span className="muted">Invited, no login yet</span><span>{customers.data.filter((c) => c.status === 'invited').length}</span></li>
-                <li><span className="muted">Onboarding not finished</span><span>{customers.data.filter((c) => c.status === 'registered' || c.status === 'in_progress').length}</span></li>
-                <li><span className="muted">Onboarding complete</span><span>{customers.data.filter((c) => c.status === 'completed').length}</span></li>
+                <li><span className="muted">Invited, no login yet</span><span>{customersInvited}</span></li>
+                <li><span className="muted">Onboarding not finished</span><span>{customersUnfinished}</span></li>
+                <li><span className="muted">Onboarding complete</span><span>{customersDone}</span></li>
               </ul>
               <p style={{ marginBottom: 0 }}><Link href={`/w/${orgSlug}/customers?course=${programId}`}>View customers</Link></p>
             </div>
@@ -178,10 +189,10 @@ export default async function ProgramPage({ params, searchParams }: { params: Pr
               </label>
               <label className="f">Product ID <span className="muted" style={{ fontWeight: 400 }}>(optional)</span>
                 <input name="product" maxLength={200} defaultValue={program.external_product_id ?? ''} placeholder="The ID your checkout uses for this course" /></label>
-              {!!offers?.data?.length && (
+              {!!offers.length && (
                 <div className="muted" style={{ fontSize: 13 }}>
-                  Sold through {offers.data.map((o) => {
-                    const ids = [o.stripe_product_id, ...(prices?.data ?? []).filter((x) => x.offer_id === o.id).map((x) => x.stripe_price_id)].filter(Boolean);
+                  Sold through {offers.map((o) => {
+                    const ids = [o.stripe_product_id, ...o.prices.map((x) => x.stripe_price_id)].filter(Boolean);
                     return `${o.name}${ids.length ? ` (Stripe: ${ids.join(', ')})` : ' (no Stripe IDs yet)'}`;
                   }).join('; ')}
                 </div>

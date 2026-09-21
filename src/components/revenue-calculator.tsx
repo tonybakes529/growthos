@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Anton, Barlow } from 'next/font/google';
 import { calculate, type CalculatorPresets } from '@/modules/sales/calculator';
+
+// Only used by the downloadable ROI image. preload off: nothing is fetched until someone presses Download.
+const anton = Anton({ subsets: ['latin'], weight: '400', display: 'swap', preload: false });
+const barlow = Barlow({ subsets: ['latin'], weight: ['500', '600', '700'], display: 'swap', preload: false });
 
 const usd = (v: number) => `$${Math.round(v).toLocaleString('en-US')}`;
 
@@ -10,14 +15,18 @@ const usd = (v: number) => `$${Math.round(v).toLocaleString('en-US')}`;
  * call sheet questions in the same form, so they are saved with the deal. This component just listens to them.
  * Presets can be nudged during a call; that does not change the workspace's saved presets.
  */
-export function RevenueCalculator({ formId, inputs, presets: saved }: {
+export function RevenueCalculator({ formId, inputs, presets: saved, name }: {
   formId: string;
+  /** who the numbers are for; printed on the downloaded image and used in its file name */
+  name?: string;
   /** field id of each prospect input, plus whether the field stores money (shown in dollars) */
   inputs: { leadsPerMonth?: string; closeRate?: string; avgJob?: string; hoursPerWeek?: string };
   presets: CalculatorPresets;
 }) {
   const [vals, setVals] = useState({ leadsPerMonth: 0, closeRate: 0, avgJob: 0, hoursPerWeek: 0 });
   const [presets, setPresets] = useState(saved);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const form = document.getElementById(formId);
@@ -33,6 +42,21 @@ export function RevenueCalculator({ formId, inputs, presets: saved }: {
 
   const r = calculate(vals, presets);
   const L = presets.label;
+
+  async function download() {
+    setBusy(true); setError(null);
+    try {
+      // the image code loads on first click, not with the page
+      const { renderRoiPng } = await import('./roi-image');
+      const blob = await renderRoiPng({ name, inputs: vals, presets, result: r, fonts: { display: anton.style.fontFamily, body: barlow.style.fontFamily } });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `ROI${name ? ` - ${name.replace(/[^\w .&-]+/g, '').trim()}` : ''}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not create the image'); }
+    setBusy(false);
+  }
   const preset = (k: keyof CalculatorPresets, label: string, prefix = '', suffix = '') => (
     <label className="f" style={{ flex: '1 1 120px', fontWeight: 400, fontSize: 12 }}>{label}
       <span className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>{prefix}
@@ -67,6 +91,11 @@ export function RevenueCalculator({ formId, inputs, presets: saved }: {
         <div><div className="k">Cost of waiting 3 months</div><div className="n bad">{usd(r.waiting.m3)}</div></div>
         <div><div className="k">6 months</div><div className="n bad">{usd(r.waiting.m6)}</div></div>
         <div><div className="k">12 months</div><div className="n bad">{usd(r.waiting.m12)}</div></div>
+      </div>
+
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <span className="muted" style={{ fontSize: 12 }}>{error ?? 'Downloads a picture of these numbers to share on screen.'}</span>
+        <button className="btn primary" type="button" onClick={download} disabled={!r.hasInputs || busy}>{busy ? 'Preparing…' : 'Download ROI image'}</button>
       </div>
 
       <details className="edit"><summary>Adjust the {L} numbers for this call</summary>

@@ -13,15 +13,14 @@ export default async function Scorecard({ params, searchParams }: { params: Prom
   if (!can(ctx, 'kpis.read')) {
     return (<><PageHead sub={ctx.name} title="Growth · Weekly Scorecard" /><div className="card muted">You don&apos;t have access to the scorecard.</div></>);
   }
-  const cards = (await ctx.sb.from('scorecards').select('id, name').eq('organization_id', ctx.organizationId).is('deleted_at', null).limit(1)).data ?? [];
-  const card = cards[0];
-  if (!card) return (<><PageHead sub={ctx.name} title="Growth · Weekly Scorecard" /><div className="card muted">No scorecard set up for this workspace yet. Your Growth OS team adds one from a template.</div></>);
-
   const lastWeek = new Date(); lastWeek.setDate(lastWeek.getDate() - 7);
   const week = sp.week ?? iso(lastWeek);
-  const res = await getWeeklyScorecard({ orgSlug, scorecardId: card.id, weekOf: week });
+  // one call finds the workspace's scorecard and loads the week with it
+  const res = await getWeeklyScorecard({ orgSlug, weekOf: week });
   if (!res.ok) return <Flash err={res.error.message} />;
-  const { rows, weekStart, submission } = res.data;
+  if (!res.data) return (<><PageHead sub={ctx.name} title="Growth · Weekly Scorecard" /><div className="card muted">No scorecard set up for this workspace yet. Your Growth OS team adds one from a template.</div></>);
+  const { rows, weekStart, submission, scorecard: card } = res.data;
+  const cardId = card.id;
   const shift = (days: number) => { const d = new Date(`${weekStart}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return iso(d); };
   const editable = can(ctx, 'kpis.create');
 
@@ -31,7 +30,7 @@ export default async function Scorecard({ params, searchParams }: { params: Prom
     for (const [k, v] of form.entries()) if (k.startsWith('k_') && String(v) !== '') values[k.slice(2)] = Number(v);
     const lines = (k: string) => String(form.get(k) || '').split('\n').map((s) => s.trim()).filter(Boolean);
     const ws = String(form.get('week'));
-    done(`${path}`, await submitWeeklyScorecard({ scorecardId: card!.id, weekOf: ws, values, wins: lines('wins'), blockers: lines('blockers'),
+    done(`${path}`, await submitWeeklyScorecard({ scorecardId: cardId, weekOf: ws, values, wins: lines('wins'), blockers: lines('blockers'),
       summary: String(form.get('summary') || '') || undefined }), `Scorecard for week of ${ws} submitted`);
   }
 

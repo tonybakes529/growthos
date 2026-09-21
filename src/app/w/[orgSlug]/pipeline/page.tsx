@@ -14,18 +14,25 @@ export default async function Pipeline({ params, searchParams }: { params: Promi
   const org = ctx.organizationId;
   if (!can(ctx, 'sales.read')) return (<><PageHead sub={ctx.name} title="Sales Pipeline" /><div className="card muted">You don't have access to sales.</div></>);
 
-  const pipe = (await ctx.sb.from('pipelines').select('id, name').eq('organization_id', org).is('deleted_at', null).order('is_default', { ascending: false }).limit(1)).data?.[0];
-  if (!pipe) return (<><PageHead sub={ctx.name} title="Sales Pipeline" /><div className="card muted">No pipeline yet. Your Growth OS team adds one from a template.</div></>);
   const today = new Date();
   const from = new Date(today.getFullYear(), today.getMonth() - 2, 1).toISOString().slice(0, 10);
-  const [stages, opps, contacts, metrics] = await Promise.all([
-    ctx.sb.from('pipeline_stages').select('id, name, stage_type, position').eq('pipeline_id', pipe.id).order('position'),
-    ctx.sb.from('opportunities').select('id, title, stage_id, status, value_cents, cash_collected_cents, contact_id, closed_at').eq('pipeline_id', pipe.id).is('deleted_at', null),
-    ctx.sb.from('contacts').select('id, first_name, last_name').eq('organization_id', org).is('deleted_at', null),
+  // One round: stages and deals are read by workspace and narrowed to the default pipeline below, so nothing waits
+  // for the pipeline row. Each deal carries its contact's name; this used to download every contact in the workspace.
+  const [pipes, stages, opps, metrics] = await Promise.all([
+    ctx.sb.from('pipelines').select('id, name').eq('organization_id', org).is('deleted_at', null).order('is_default', { ascending: false }).limit(1),
+    ctx.sb.from('pipeline_stages').select('id, pipeline_id, name, stage_type, position').eq('organization_id', org).order('position'),
+    ctx.sb.from('opportunities')
+      .select('id, pipeline_id, title, stage_id, status, value_cents, cash_collected_cents, contact_id, closed_at, contact:contacts!opportunities_organization_id_contact_id_fkey(first_name, last_name)')
+      .eq('organization_id', org).is('deleted_at', null)
+      .overrideTypes<{ id: string; pipeline_id: string; title: string; stage_id: string; status: string; value_cents: number; cash_collected_cents: number;
+        contact_id: string; closed_at: string | null; contact: { first_name: string | null; last_name: string | null } | null }[], { merge: false }>(),
     can(ctx, 'reports.read') ? getGrowthMetrics({ orgSlug, from, to: today.toISOString().slice(0, 10) }) : null,
   ]);
-  const st = stages.data ?? [];
-  const contactName = (id: string) => { const c = contacts.data?.find((x) => x.id === id); return c ? `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim() : ''; };
+  const pipe = pipes.data?.[0];
+  if (!pipe) return (<><PageHead sub={ctx.name} title="Sales Pipeline" /><div className="card muted">No pipeline yet. Your Growth OS team adds one from a template.</div></>);
+  const st = (stages.data ?? []).filter((s) => s.pipeline_id === pipe.id);
+  const deals = (opps.data ?? []).filter((o) => o.pipeline_id === pipe.id);
+  const contactName = (o: (typeof deals)[number]) => `${o.contact?.first_name ?? ''} ${o.contact?.last_name ?? ''}`.trim();
   const m = metrics?.ok ? metrics.data : [];
   const sum = (k: keyof (typeof m)[number]) => m.reduce((a, r) => a + Number(r[k] ?? 0), 0);
   const leads = sum('leads'), showed = sum('appointments_showed'), closes = sum('closes'), spend = sum('marketing_spend_cents');
@@ -66,20 +73,20 @@ export default async function Pipeline({ params, searchParams }: { params: Promi
           <Stat k="Leads (3 mo)" v={leads} />
           <Stat k="Show rate" v={`${sum('appointments_booked') ? Math.round((100 * showed) / sum('appointments_booked')) : 0}%`} s={`${showed} of ${sum('appointments_booked')} booked`} />
           <Stat k="Close rate" v={`${showed ? Math.round((100 * closes) / showed) : 0}%`} s={`${closes} closed`} />
-          <Stat k="Cash collected" v={money((opps.data ?? []).filter((o) => o.status === 'won').reduce((a, o) => a + o.cash_collected_cents, 0))} s="on won deals" />
+          <Stat k="Cash collected" v={money(deals.filter((o) => o.status === 'won').reduce((a, o) => a + o.cash_collected_cents, 0))} s="on won deals" />
           <Stat k="Cost per lead" v={spend && leads ? money(spend / leads) : '—'} s={spend ? `${money(spend)} spend` : 'no spend access'} />
         </div>
       )}
       <div className="kanban">
         {st.map((s) => {
-          const deals = (opps.data ?? []).filter((o) => o.stage_id === s.id);
+          const inStage = deals.filter((o) => o.stage_id === s.id);
           return (
             <div key={s.id} className="col">
-              <div><b>{s.name}</b> <span className="muted">{deals.length} · {money(deals.reduce((a, d) => a + d.value_cents, 0))}</span></div>
-              {deals.map((d) => (
+              <div><b>{s.name}</b> <span className="muted">{inStage.length} · {money(inStage.reduce((a, d) => a + d.value_cents, 0))}</span></div>
+              {inStage.map((d) => (
                 <div key={d.id} className="deal">
                   <Link href={`${path}/${d.id}`}><b>{d.title}</b></Link>
-                  <span className="muted">{money(d.value_cents)} · {contactName(d.contact_id)}</span>
+                  <span className="muted">{money(d.value_cents)} · {contactName(d)}</span>
                   {can(ctx, 'sales.update') && (
                     <form action={move} className="row">
                       <input type="hidden" name="id" value={d.id} />

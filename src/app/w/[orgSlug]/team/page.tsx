@@ -13,7 +13,7 @@ export default async function Team({ params, searchParams }: { params: Promise<{
   const path = `/w/${orgSlug}/team`;
   const [members, invites, roles] = await Promise.all([
     listMembers({ orgSlug }),
-    can(ctx, 'members.read') ? listInvitations({ orgSlug }) : null,
+    can(ctx, 'members.read') ? listInvitations({ orgSlug, pendingOnly: true }) : null,
     ctx.sb.from('roles').select('id, key, name, audience, organization_id').eq('audience', 'member'),
   ]);
   const memberRoles = (roles.data ?? []).filter((r) => r.organization_id === null || r.organization_id === ctx.organizationId);

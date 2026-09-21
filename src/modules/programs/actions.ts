@@ -126,12 +126,16 @@ export const createModule = action(
   async (i) => {
     const ctx = await requireOrg(i.orgSlug);
     assertCan(ctx, 'programs.create');
-    const section = unwrap(await ctx.sb.from('program_sections').select('id, program_id').eq('id', i.sectionId).single());
+    // the parent's id is already known, so its lookup and the position count go out together
+    const [sectionRes, position] = await Promise.all([
+      ctx.sb.from('program_sections').select('id, program_id').eq('id', i.sectionId).single(),
+      nextPosition(ctx, 'modules', 'section_id', i.sectionId),
+    ]);
+    const section = unwrap(sectionRes);
     return unwrap(
       await ctx.sb.from('modules').insert({
         organization_id: ctx.organizationId, program_id: section.program_id, section_id: section.id,
-        title: i.title, description: i.description, ...dripColumns(i.drip),
-        position: await nextPosition(ctx, 'modules', 'section_id', section.id),
+        title: i.title, description: i.description, ...dripColumns(i.drip), position,
       }).select('id').single(),
     );
   },
@@ -153,14 +157,17 @@ export const createLesson = action(
   async (i) => {
     const ctx = await requireOrg(i.orgSlug);
     assertCan(ctx, 'programs.create');
-    const mod = unwrap(await ctx.sb.from('modules').select('id, program_id').eq('id', i.moduleId).single());
+    const [modRes, position] = await Promise.all([
+      ctx.sb.from('modules').select('id, program_id').eq('id', i.moduleId).single(),
+      nextPosition(ctx, 'lessons', 'module_id', i.moduleId),
+    ]);
+    const mod = unwrap(modRes);
     return unwrap(
       await ctx.sb.from('lessons').insert({
         organization_id: ctx.organizationId, program_id: mod.program_id, module_id: mod.id,
         title: i.title, summary: i.summary, ...dripColumns(i.drip),
         requires_previous_completion: i.requiresPreviousCompletion, is_preview: i.isPreview,
-        estimated_minutes: i.estimatedMinutes, completion_rule: i.completionRule, status: i.status,
-        position: await nextPosition(ctx, 'lessons', 'module_id', mod.id),
+        estimated_minutes: i.estimatedMinutes, completion_rule: i.completionRule, status: i.status, position,
       }).select('id').single(),
     );
   },
@@ -184,7 +191,12 @@ export const upsertLessonBlock = action(
     .and(zBlock),
   async (i) => {
     const ctx = await requireOrg(i.orgSlug);
-    const lesson = unwrap(await ctx.sb.from('lessons').select('id, program_id').eq('id', i.lessonId).single());
+    // a new block without a position needs the count too; it only depends on the lesson id, so it goes out alongside
+    const [lessonRes, nextPos] = await Promise.all([
+      ctx.sb.from('lessons').select('id, program_id').eq('id', i.lessonId).single(),
+      !i.blockId && i.position === undefined ? nextPosition(ctx, 'lesson_blocks', 'lesson_id', i.lessonId) : null,
+    ]);
+    const lesson = unwrap(lessonRes);
     const row = { block_type: i.blockType, content: i.content, file_id: i.fileId ?? null };
     if (i.blockId) {
       assertCan(ctx, 'programs.update');
@@ -194,7 +206,7 @@ export const upsertLessonBlock = action(
     return unwrap(
       await ctx.sb.from('lesson_blocks').insert({
         ...row, organization_id: ctx.organizationId, program_id: lesson.program_id, lesson_id: lesson.id,
-        position: i.position ?? (await nextPosition(ctx, 'lesson_blocks', 'lesson_id', lesson.id)),
+        position: i.position ?? nextPos ?? 0,
       }).select('id').single(),
     );
   },
@@ -230,7 +242,28 @@ export type Outline = { sections: { id: string; title: string; modules: { id: st
 /** The learner view: every lesson with lock state computed by the database. */
 export const getProgramOutline = action(z.object({ programId: zId }), async ({ programId }) => {
   const { sb } = await requireSession();
-  const rows = unwrap(await sb.schema('app').rpc('get_program_outline', { p_program_id: programId }));
+  return toOutline(unwrap(await sb.schema('app').rpc('get_program_outline', { p_program_id: programId })));
+});
+
+/**
+ * Outlines of every active course the signed-in person is enrolled in here, keyed by course id: one request,
+ * with the same availability rules as getProgramOutline.
+ */
+export const getMyOutlines = action(z.object({ orgSlug: zSlug }), async ({ orgSlug }) => {
+  const ctx = await requireOrg(orgSlug);
+  const rows = unwrap(await ctx.sb.schema('app').rpc('get_my_outlines', { p_org: ctx.organizationId }));
+  const byProgram = new Map<string, typeof rows>();
+  for (const r of rows) byProgram.set(r.program_id!, [...(byProgram.get(r.program_id!) ?? []), r]);
+  return new Map([...byProgram].map(([id, rs]) => [id, toOutline(rs)]));
+});
+
+type OutlineRow = {
+  section_id: string | null; section_title: string | null; module_id: string | null; module_title: string | null;
+  lesson_id: string | null; lesson_title: string | null; lesson_position: number | null; estimated_minutes: number | null;
+  is_available: boolean | null; unlocks_at: string | null; lock_reason: string | null; progress_status: string | null; completed_at: string | null;
+};
+
+function toOutline(rows: OutlineRow[]): Outline {
   const outline: Outline = { sections: [] };
   for (const r of rows) {
     let section = outline.sections.find((s) => s.id === r.section_id);
@@ -244,18 +277,47 @@ export const getProgramOutline = action(z.object({ programId: zId }), async ({ p
     });
   }
   return outline;
-});
+}
 
-/** Lesson content; RLS returns no blocks when the lesson is locked for this user. */
+type LessonAssignment = {
+  id: string; title: string; instructions: string | null; submission_types: string[];
+  submissions: { status: string; submitted_at: string | null }[];
+};
+type LessonQuiz = {
+  id: string; title: string; pass_percent: number; max_attempts: number | null;
+  questions: { id: string; position: number; question_type: string; prompt: string; options: unknown; points: number }[];
+  attempts: { attempt: number; score_percent: number | null; passed: boolean; submitted_at: string | null }[];
+};
+
+/**
+ * Lesson content; RLS returns no blocks when the lesson is locked for this user. Each quiz carries its questions
+ * (never the answer keys) and each assignment and quiz carries only the viewer's own submissions and attempts.
+ */
 export const getLesson = action(z.object({ lessonId: zId }), async ({ lessonId }) => {
-  const { sb } = await requireSession();
-  const lesson = unwrap(await sb.from('lessons').select('id, title, summary, program_id, module_id, completion_rule, estimated_minutes').eq('id', lessonId).single());
-  const [blocks, resources, assignments, quizzes] = await Promise.all([
+  const { sb, ctx } = await requireSession();
+  const me = ctx.effective_user_id;
+  // All five reads only need the lesson id, so they go out together, with quiz questions, attempts and submissions
+  // embedded (this used to be a second round plus three requests per quiz). RLS decides what each one returns,
+  // and a lesson the viewer cannot see still fails the same way (the .single() below).
+  const [lessonRes, blocks, resources, assignments, quizzes] = await Promise.all([
+    sb.from('lessons').select('id, title, summary, program_id, module_id, completion_rule, estimated_minutes').eq('id', lessonId).single(),
     sb.from('lesson_blocks').select('id, block_type, position, content, file_id').eq('lesson_id', lessonId).order('position'),
     sb.from('resources').select('id, title, resource_type, url, file_id').eq('lesson_id', lessonId).is('deleted_at', null),
-    sb.from('assignments').select('id, title, instructions, submission_types').eq('lesson_id', lessonId).is('deleted_at', null),
-    sb.from('quizzes').select('id, title, pass_percent, max_attempts').eq('lesson_id', lessonId).is('deleted_at', null),
+    sb.from('assignments')
+      .select('id, title, instructions, submission_types, submissions:assignment_submissions!assignment_submissions_organization_id_assignment_id_fkey(status, submitted_at)')
+      .eq('lesson_id', lessonId).is('deleted_at', null)
+      .eq('submissions.user_id', me).order('submitted_at', { referencedTable: 'submissions', nullsFirst: true })
+      .overrideTypes<LessonAssignment[], { merge: false }>(),
+    sb.from('quizzes')
+      .select(`id, title, pass_percent, max_attempts,
+        questions:quiz_questions!quiz_questions_organization_id_quiz_id_fkey(id, position, question_type, prompt, options, points),
+        attempts:quiz_attempts!quiz_attempts_organization_id_quiz_id_fkey(attempt, score_percent, passed, submitted_at)`)
+      .eq('lesson_id', lessonId).is('deleted_at', null)
+      .eq('attempts.user_id', me)
+      .order('position', { referencedTable: 'questions' }).order('attempt', { referencedTable: 'attempts' })
+      .overrideTypes<LessonQuiz[], { merge: false }>(),
   ]);
+  const lesson = unwrap(lessonRes);
   const b = unwrap(blocks);
   return { lesson, locked: b.length === 0, blocks: b, resources: unwrap(resources), assignments: unwrap(assignments), quizzes: unwrap(quizzes) };
 });

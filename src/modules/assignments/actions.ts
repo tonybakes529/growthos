@@ -61,9 +61,13 @@ export const submitQuizAttempt = action(
 
 /** Questions without answer keys (learners cannot read quiz_answer_keys). */
 export const getQuiz = action(z.object({ quizId: zId }), async ({ quizId }) => {
-  const { sb } = await requireSession();
-  const quiz = unwrap(await sb.from('quizzes').select('id, title, pass_percent, max_attempts').eq('id', quizId).single());
-  const questions = unwrap(await sb.from('quiz_questions').select('id, position, question_type, prompt, options, points').eq('quiz_id', quizId).order('position'));
-  const attempts = unwrap(await sb.from('quiz_attempts').select('attempt, score_percent, passed, submitted_at').eq('quiz_id', quizId).order('attempt'));
-  return { quiz, questions, attempts };
+  const { sb, ctx } = await requireSession();
+  const [quiz, questions, attempts] = await Promise.all([
+    sb.from('quizzes').select('id, title, pass_percent, max_attempts').eq('id', quizId).single(),
+    sb.from('quiz_questions').select('id, position, question_type, prompt, options, points').eq('quiz_id', quizId).order('position'),
+    // only the viewer's own attempts: RLS lets coaches read every student's, which is not what "your attempts" means
+    sb.from('quiz_attempts').select('attempt, score_percent, passed, submitted_at').eq('quiz_id', quizId)
+      .eq('user_id', ctx.effective_user_id).order('attempt'),
+  ]);
+  return { quiz: unwrap(quiz), questions: unwrap(questions), attempts: unwrap(attempts) };
 });

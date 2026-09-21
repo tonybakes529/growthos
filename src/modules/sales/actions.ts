@@ -63,16 +63,26 @@ export const NOTE_TYPES = ['pain', 'budget', 'decision_maker', 'objection', 'nex
 export const SHEET_FIELD_TYPES = ['text', 'long_text', 'number', 'currency', 'date', 'boolean', 'select', 'multi_select', 'url', 'email', 'phone'] as const;
 export type SheetField = { id: string; key: string; label: string; field_type: (typeof SHEET_FIELD_TYPES)[number]; options: string[]; is_required: boolean; position: number };
 
+const DEAL_COLUMNS = 'id, pipeline_id, stage_id, contact_id, offer_id, title, status, value_cents, cash_collected_cents, expected_close_on, lost_notes, closed_at, created_at';
+type DealRow = {
+  id: string; pipeline_id: string; stage_id: string; contact_id: string; offer_id: string | null; title: string; status: string;
+  value_cents: number; cash_collected_cents: number; expected_close_on: string | null; lost_notes: string | null;
+  closed_at: string | null; created_at: string;
+};
+type DealContact = { id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null; company: string | null };
+
 export const getDeal = action(z.object({ orgSlug: zSlug, dealId: zId }), async ({ orgSlug, dealId }) => {
   const ctx = await requireOrg(orgSlug);
   assertCan(ctx, 'sales.read');
   const org = ctx.organizationId;
-  const deal = unwrapRequired(await ctx.sb.from('opportunities')
-    .select('id, pipeline_id, stage_id, contact_id, offer_id, title, status, value_cents, cash_collected_cents, expected_close_on, lost_notes, closed_at, created_at')
-    .eq('id', dealId).eq('organization_id', org).is('deleted_at', null).maybeSingle(), 'Deal');
-  const [contact, stages, offers, fields, values, calls, notes, settings] = await Promise.all([
-    ctx.sb.from('contacts').select('id, first_name, last_name, email, phone, company').eq('id', deal.contact_id).maybeSingle(),
-    ctx.sb.from('pipeline_stages').select('id, name, stage_type, position').eq('pipeline_id', deal.pipeline_id).order('position'),
+  // One round. The contact rides along with the deal, and stages are read by workspace and narrowed to the
+  // deal's pipeline below, so nothing has to wait for the deal row first.
+  const [dealRes, stages, offers, fields, values, calls, notes, settings] = await Promise.all([
+    ctx.sb.from('opportunities')
+      .select(`${DEAL_COLUMNS}, contact:contacts!opportunities_organization_id_contact_id_fkey(id, first_name, last_name, email, phone, company)`)
+      .eq('id', dealId).eq('organization_id', org).is('deleted_at', null).maybeSingle()
+      .overrideTypes<DealRow & { contact: DealContact | null }, { merge: false }>(),
+    ctx.sb.from('pipeline_stages').select('id, pipeline_id, name, stage_type, position').eq('organization_id', org).order('position'),
     ctx.sb.from('offers').select('id, name, status').eq('organization_id', org).is('deleted_at', null).neq('status', 'retired').order('name'),
     ctx.sb.from('custom_fields').select('id, key, label, field_type, options, is_required, position')
       .eq('organization_id', org).eq('entity_type', 'opportunity').eq('is_archived', false).order('position'),
@@ -83,9 +93,12 @@ export const getDeal = action(z.object({ orgSlug: zSlug, dealId: zId }), async (
       .is('deleted_at', null).order('created_at', { ascending: false }),
     readSettings(ctx),
   ]);
+  const { contact, ...deal } = unwrapRequired(dealRes, 'Deal');
   return {
     config: configFrom(settings),
-    deal, contact: unwrap(contact), stages: unwrap(stages), offers: unwrap(offers),
+    deal, contact,
+    stages: unwrap(stages).filter((st) => st.pipeline_id === deal.pipeline_id).map(({ pipeline_id: _p, ...st }) => st),
+    offers: unwrap(offers),
     fields: unwrap(fields) as unknown as SheetField[],
     values: Object.fromEntries(unwrap(values).map((v) => [v.custom_field_id, v.value])) as Record<string, unknown>,
     calls: unwrap(calls), notes: unwrap(notes),
@@ -133,9 +146,14 @@ export const saveCallSheet = action(z.object({ orgSlug: zSlug, dealId: zId, valu
   const ctx = await requireOrg(i.orgSlug);
   assertCan(ctx, 'sales.update');
   const org = ctx.organizationId;
-  unwrapRequired(await ctx.sb.from('opportunities').select('id').eq('id', i.dealId).eq('organization_id', org).maybeSingle(), 'Deal');
-  const fields = unwrap(await ctx.sb.from('custom_fields').select('id, label, field_type, options, is_required')
-    .eq('organization_id', org).eq('entity_type', 'opportunity').eq('is_archived', false)) as unknown as SheetField[];
+  // the deal check and the sheet's fields are independent, and so are the upsert and the clear below: two rounds, not four
+  const [deal, fieldRes] = await Promise.all([
+    ctx.sb.from('opportunities').select('id').eq('id', i.dealId).eq('organization_id', org).maybeSingle(),
+    ctx.sb.from('custom_fields').select('id, label, field_type, options, is_required')
+      .eq('organization_id', org).eq('entity_type', 'opportunity').eq('is_archived', false),
+  ]);
+  unwrapRequired(deal, 'Deal');
+  const fields = unwrap(fieldRes) as unknown as SheetField[];
   const upserts: { organization_id: string; custom_field_id: string; entity_id: string; value: never }[] = [];
   const clears: string[] = [];
   for (const f of fields) {
@@ -148,8 +166,13 @@ export const saveCallSheet = action(z.object({ orgSlug: zSlug, dealId: zId, valu
     if (f.field_type === 'multi_select' && (!Array.isArray(v) || v.some((x) => !f.options.includes(x)))) throw new AppError('validation', `"${f.label}" has an option that is not on the sheet`);
     upserts.push({ organization_id: org, custom_field_id: f.id, entity_id: i.dealId, value: v as never });
   }
-  if (upserts.length) unwrap(await ctx.sb.from('custom_field_values').upsert(upserts, { onConflict: 'custom_field_id,entity_id' }).select('id'));
-  if (clears.length) unwrap(await ctx.sb.from('custom_field_values').delete().eq('entity_id', i.dealId).eq('organization_id', org).in('custom_field_id', clears).select('id'));
+  // a field is either saved or cleared, never both, so the two writes can go out together
+  const [up, cl] = await Promise.all([
+    upserts.length ? ctx.sb.from('custom_field_values').upsert(upserts, { onConflict: 'custom_field_id,entity_id' }).select('id') : null,
+    clears.length ? ctx.sb.from('custom_field_values').delete().eq('entity_id', i.dealId).eq('organization_id', org).in('custom_field_id', clears).select('id') : null,
+  ]);
+  if (up) unwrap(up);
+  if (cl) unwrap(cl);
   return { saved: upserts.length };
 });
 
@@ -202,8 +225,9 @@ function configFrom(settings: Record<string, unknown>): SheetConfig {
     calculator: calc ? { ...cleanPresets(calc), enabled: calc.enabled !== false } : null,
   };
 }
-async function writeSettings(ctx: OrgContext, patch: Record<string, unknown>) {
-  const settings = { ...(await readSettings(ctx)), ...patch };
+/** Merges `patch` into the workspace settings. Pass the settings you already read to skip reading them again. */
+async function writeSettings(ctx: OrgContext, patch: Record<string, unknown>, current?: Record<string, unknown>) {
+  const settings = { ...(current ?? await readSettings(ctx)), ...patch };
   unwrap(await ctx.sb.from('organizations').update({ settings: settings as never }).eq('id', ctx.organizationId).select('id').single());
 }
 
@@ -235,11 +259,12 @@ export const saveSheetSection = action(
   async (i) => {
     const ctx = await requireOrg(i.orgSlug);
     assertCan(ctx, 'custom_fields.update', 'organization.update');
-    const cfg = configFrom(await readSettings(ctx));
+    const settings = await readSettings(ctx);
+    const cfg = configFrom(settings);
     const s = cfg.sections.find((x) => x.id === i.sectionId);
     if (!s) throw new AppError('not_found', 'Section not found');
     s.title = i.title; s.script = i.script || undefined;
-    await writeSettings(ctx, { call_sheet: { sections: cfg.sections } });
+    await writeSettings(ctx, { call_sheet: { sections: cfg.sections } }, settings);
     return null;
   },
 );
@@ -247,18 +272,20 @@ export const saveSheetSection = action(
 export const addSheetSection = action(z.object({ orgSlug: zSlug, title: z.string().trim().min(1).max(120), script: z.string().trim().max(4000).optional() }), async (i) => {
   const ctx = await requireOrg(i.orgSlug);
   assertCan(ctx, 'custom_fields.update', 'organization.update');
-  const cfg = configFrom(await readSettings(ctx));
+  const settings = await readSettings(ctx);
+  const cfg = configFrom(settings);
   cfg.sections.push({ id: sectionId(i.title, cfg.sections.map((s) => s.id)), title: i.title, script: i.script || undefined, keys: [] });
-  await writeSettings(ctx, { call_sheet: { sections: cfg.sections } });
+  await writeSettings(ctx, { call_sheet: { sections: cfg.sections } }, settings);
   return null;
 });
 
 export const removeSheetSection = action(z.object({ orgSlug: zSlug, sectionId: z.string().max(60) }), async (i) => {
   const ctx = await requireOrg(i.orgSlug);
   assertCan(ctx, 'custom_fields.update', 'organization.update');
-  const cfg = configFrom(await readSettings(ctx));
+  const settings = await readSettings(ctx);
+  const cfg = configFrom(settings);
   // its questions are not deleted; they fall back to "Other questions"
-  await writeSettings(ctx, { call_sheet: { sections: cfg.sections.filter((s) => s.id !== i.sectionId) } });
+  await writeSettings(ctx, { call_sheet: { sections: cfg.sections.filter((s) => s.id !== i.sectionId) } }, settings);
   return null;
 });
 
@@ -279,25 +306,22 @@ export const installDiscoveryTemplate = action(z.object({ orgSlug: zSlug }), asy
   const org = ctx.organizationId;
   const existing = unwrap(await ctx.sb.from('custom_fields').select('key, is_archived').eq('organization_id', org).eq('entity_type', 'opportunity'));
   if (existing.some((f) => !f.is_archived)) throw new AppError('conflict', 'This call sheet already has questions. Remove them first, or add to it by hand.');
-  const taken = new Set(existing.map((f) => f.key));           // archived keys stay reserved by the unique constraint
   let position = 0;
   const rows = DISCOVERY_TEMPLATE.flatMap((s) => s.fields.map((f) => ({
     organization_id: org, entity_type: 'opportunity', key: f.key, label: f.label, field_type: f.type,
-    options: f.options ?? [], is_required: !!f.required, position: position++,
+    options: f.options ?? [], is_required: !!f.required, position: position++, is_archived: false,
   })));
-  const clash = rows.filter((r) => taken.has(r.key));
-  if (clash.length) {
-    // bring the archived ones back rather than fail on the unique key
-    for (const r of clash) unwrap(await ctx.sb.from('custom_fields').update({ label: r.label, field_type: r.field_type, options: r.options, is_required: r.is_required, position: r.position, is_archived: false })
-      .eq('organization_id', org).eq('entity_type', 'opportunity').eq('key', r.key).select('id'));
-  }
-  const fresh = rows.filter((r) => !taken.has(r.key));
-  if (fresh.length) unwrap(await ctx.sb.from('custom_fields').insert(fresh).select('id'));
-  const settings = await readSettings(ctx);
+  // One write: new questions are inserted, and archived ones with the same key (still reserved by the unique key)
+  // are brought back with the template's wording. This used to update the archived ones one request at a time.
+  const [saved, settings] = await Promise.all([
+    ctx.sb.from('custom_fields').upsert(rows, { onConflict: 'organization_id,entity_type,key' }).select('id'),
+    readSettings(ctx),
+  ]);
+  unwrap(saved);
   await writeSettings(ctx, {
     call_sheet: { sections: DISCOVERY_TEMPLATE.map((s) => ({ id: s.id, title: s.title, script: s.script, calculator: s.calculator, keys: s.fields.map((f) => f.key) })) },
     sales_calculator: settings.sales_calculator ?? { ...cleanPresets(null), enabled: true },
-  });
+  }, settings);
   return { questions: rows.length, sections: DISCOVERY_TEMPLATE.length };
 });
 
@@ -337,8 +361,9 @@ export const addSheetField = action(zSheetField.extend({ orgSlug: zSlug }), asyn
     options: optionsFor(i.type, i.options), position: existing.length ? Math.max(...existing.map((f) => f.position)) + 1 : 0,
   }).select('id').single());
   if (i.section && (ctx.permissions.has('organization.update') || ctx.ctx.is_super_admin)) {
-    const cfg = configFrom(await readSettings(ctx));
-    await writeSettings(ctx, { call_sheet: { sections: placeKey(cfg.sections, key, i.section) } });
+    const settings = await readSettings(ctx);
+    const cfg = configFrom(settings);
+    await writeSettings(ctx, { call_sheet: { sections: placeKey(cfg.sections, key, i.section) } }, settings);
   }
   return row;
 });
@@ -349,9 +374,10 @@ export const updateSheetField = action(zSheetField.extend({ orgSlug: zSlug, fiel
   const row = unwrap(await ctx.sb.from('custom_fields').update({ label: i.label, field_type: i.type, is_required: i.required, options: optionsFor(i.type, i.options) })
     .eq('id', i.fieldId).eq('organization_id', ctx.organizationId).eq('entity_type', 'opportunity').select('key').single());
   if (i.section !== undefined && (ctx.permissions.has('organization.update') || ctx.ctx.is_super_admin)) {
-    const cfg = configFrom(await readSettings(ctx));
+    const settings = await readSettings(ctx);
+    const cfg = configFrom(settings);
     const current = cfg.sections.find((s) => s.keys.includes(row.key));
-    if ((current?.title ?? '').toLowerCase() !== i.section.toLowerCase()) await writeSettings(ctx, { call_sheet: { sections: placeKey(cfg.sections, row.key, i.section) } });
+    if ((current?.title ?? '').toLowerCase() !== i.section.toLowerCase()) await writeSettings(ctx, { call_sheet: { sections: placeKey(cfg.sections, row.key, i.section) } }, settings);
   }
   return null;
 });
@@ -371,14 +397,15 @@ export const moveSheetField = action(z.object({ orgSlug: zSlug, fieldId: zId, di
     .eq('entity_type', 'opportunity').eq('is_archived', false).order('position'));
   const me = fs.find((f) => f.id === i.fieldId);
   if (!me) return null;
-  const cfg = configFrom(await readSettings(ctx));
+  const settings = await readSettings(ctx);
+  const cfg = configFrom(settings);
   const section = cfg.sections.find((s) => s.keys.includes(me.key));
   if (section) {
     // inside a section the order is the order of its keys
     const from = section.keys.indexOf(me.key), to = i.direction === 'up' ? from - 1 : from + 1;
     if (to < 0 || to >= section.keys.length) return null;
     [section.keys[from], section.keys[to]] = [section.keys[to]!, section.keys[from]!];
-    await writeSettings(ctx, { call_sheet: { sections: cfg.sections } });
+    await writeSettings(ctx, { call_sheet: { sections: cfg.sections } }, settings);
     return null;
   }
   const sectioned = new Set(cfg.sections.flatMap((s) => s.keys));

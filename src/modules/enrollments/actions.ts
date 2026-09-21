@@ -52,19 +52,21 @@ export const unlockLesson = action(
   },
 );
 
+type MyEnrollment = {
+  id: string; program_id: string; status: string; progress_percent: number; lessons_completed: number; lessons_total: number;
+  enrolled_at: string; completed_at: string | null; last_activity_at: string | null; access_expires_at: string | null;
+  program: { id: string; title: string; slug: string; subtitle: string | null } | null;
+};
+
+/** The signed-in person's courses here, each with its course row attached in the same request (was two round trips). */
 export const listMyEnrollments = action(z.object({ orgSlug: zSlug }), async ({ orgSlug }) => {
   const ctx = await requireOrg(orgSlug);
-  const enrollments = unwrap(
+  return unwrap(
     await ctx.sb.from('program_enrollments')
-      .select('id, program_id, status, progress_percent, lessons_completed, lessons_total, enrolled_at, completed_at, last_activity_at, access_expires_at')
-      .eq('organization_id', ctx.organizationId).eq('user_id', ctx.ctx.effective_user_id),
+      .select('id, program_id, status, progress_percent, lessons_completed, lessons_total, enrolled_at, completed_at, last_activity_at, access_expires_at, program:programs!program_enrollments_organization_id_program_id_fkey(id, title, slug, subtitle)')
+      .eq('organization_id', ctx.organizationId).eq('user_id', ctx.ctx.effective_user_id)
+      .overrideTypes<MyEnrollment[], { merge: false }>(),
   );
-  const programIds = enrollments.map((e) => e.program_id);
-  const programs = programIds.length
-    ? unwrap(await ctx.sb.from('programs').select('id, title, slug, subtitle').in('id', programIds))
-    : [];
-  const byId = new Map(programs.map((p) => [p.id, p]));
-  return enrollments.map((e) => ({ ...e, program: byId.get(e.program_id) ?? null }));
 });
 
 /** Coach / admin view: per-student progress for one program + roll-up. */
@@ -73,19 +75,19 @@ export const getProgressReport = action(z.object({ orgSlug: zSlug, programId: zI
   assertCan(ctx, 'enrollments.read');
   const [summary, rows] = await Promise.all([
     ctx.sb.from('program_completion_v').select('*').eq('program_id', programId).maybeSingle(),
+    // each student's profile rides along (this used to be a second round)
     ctx.sb.from('program_enrollments')
-      .select('id, user_id, status, progress_percent, lessons_completed, lessons_total, enrolled_at, completed_at, last_activity_at')
-      .eq('program_id', programId).neq('status', 'revoked').order('progress_percent', { ascending: false }),
+      .select('id, user_id, status, progress_percent, lessons_completed, lessons_total, enrolled_at, completed_at, last_activity_at, user:users!program_enrollments_user_id_fkey(profile:user_profiles!user_profiles_user_id_fkey(user_id, display_name, avatar_url))')
+      .eq('program_id', programId).neq('status', 'revoked').order('progress_percent', { ascending: false })
+      .overrideTypes<{ id: string; user_id: string; status: string; progress_percent: number; lessons_completed: number; lessons_total: number;
+        enrolled_at: string; completed_at: string | null; last_activity_at: string | null;
+        user: { profile: { user_id: string; display_name: string | null; avatar_url: string | null } | null } | null }[], { merge: false }>(),
   ]);
-  const students = unwrap(rows);
-  const profiles = students.length
-    ? unwrap(await ctx.sb.from('user_profiles').select('user_id, display_name, avatar_url').in('user_id', students.map((s) => s.user_id)))
-    : [];
-  const byId = new Map(profiles.map((p) => [p.user_id, p]));
+  const students = unwrap(rows).map(({ user, ...s }) => ({ ...s, profile: user?.profile ?? null }));
   const stalled = students.filter((s) => s.status === 'active' && (!s.last_activity_at || Date.now() - Date.parse(s.last_activity_at) > 14 * 864e5));
   return {
     summary: unwrap(summary),
-    students: students.map((s) => ({ ...s, profile: byId.get(s.user_id) ?? null })),
+    students,
     stalledCount: stalled.length,
   };
 });

@@ -35,6 +35,7 @@ export default async function Deal({ params, searchParams }: { params: Promise<{
   const calc = config.calculator?.enabled ? config.calculator : null;
   const calcInputs = { leadsPerMonth: idOf(CALCULATOR_KEYS.leadsPerMonth), closeRate: idOf(CALCULATOR_KEYS.closeRate), avgJob: idOf(CALCULATOR_KEYS.avgJob), hoursPerWeek: idOf(CALCULATOR_KEYS.hoursPerWeek) };
   // if the workspace has no section flagged for it, show the calculator after the sheet instead of hiding it
+  const roiName = contact?.company || deal.title;
   const calcPlaced = config.sections.some((s) => s.calculator);
 
   async function save(f: FormData) {
@@ -108,8 +109,8 @@ export default async function Deal({ params, searchParams }: { params: Promise<{
               <p className="card empty">No call sheet yet. {can(ctx, 'custom_fields.create') ? <><Link href={`${board}/sheet`}>Set it up</Link>: load the discovery call template or write your own questions.</> : 'Your admin sets up the questions reps answer on every deal.'}</p>
             ) : (<>
               <SheetSections fields={fields} sections={config.sections} values={values} disabled={!edit}
-                calculator={calc && <RevenueCalculator formId="callsheet" inputs={calcInputs} presets={calc} />} />
-              {calc && !calcPlaced && <RevenueCalculator formId="callsheet" inputs={calcInputs} presets={calc} />}
+                calculator={calc && <RevenueCalculator formId="callsheet" inputs={calcInputs} presets={calc} name={roiName} />} />
+              {calc && !calcPlaced && <RevenueCalculator formId="callsheet" inputs={calcInputs} presets={calc} name={roiName} />}
               {edit && <div className="savebar"><button className="btn primary" type="submit">Save call sheet</button><span className="muted">Saves every answer, including the four calculator numbers.</span></div>}
             </>)}
           </form>
