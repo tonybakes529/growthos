@@ -8,25 +8,26 @@ export default async function Activity({ params }: { params: Promise<{ orgSlug: 
     return (<><PageHead sub={ctx.name} title="Activity" /><div className="card muted">You don&apos;t have access to activity.</div></>);
   }
   const showCustomers = can(ctx, 'enrollments.read');
-  const since = new Date(Date.now() - 30 * 864e5).toISOString();
-  const [feed, customers] = await Promise.all([
+  const [feed, countRes] = await Promise.all([
     ctx.sb.from('activity_history').select('id, verb, summary, created_at').eq('organization_id', ctx.organizationId)
       .order('created_at', { ascending: false }).limit(100),
-    showCustomers ? ctx.sb.from('customer_onboardings').select('status, invited_at, completed_at').eq('organization_id', ctx.organizationId) : null,
+    // counted in the database (30-day windows included); this used to download every customer record
+    showCustomers ? ctx.sb.schema('app').rpc('workspace_counts', { p_org: ctx.organizationId }) : null,
   ]);
-  const cs = customers?.data ?? [];
-  const done = cs.filter((c) => c.status === 'completed').length;
-  const joined = cs.filter((c) => c.status !== 'invited').length;
+  const c = (countRes?.data ?? {}) as Record<string, number>;
+  const n = (k: string) => Number(c[k] ?? 0);
+  const done = n('completed');
+  const joined = n('joined');
 
   return (
     <>
       <PageHead sub={ctx.name} title="Activity" />
       {showCustomers && (
         <div className="grid g4">
-          <Stat k="Customers" v={cs.length} s="all time" />
-          <Stat k="New in 30 days" v={cs.filter((c) => c.invited_at >= since).length} />
+          <Stat k="Customers" v={n('customers')} s="all time" />
+          <Stat k="New in 30 days" v={n('new_30d')} />
           <Stat k="Onboarding completed" v={done} s={joined ? `${Math.round((done / joined) * 100)}% of those with a login` : undefined} />
-          <Stat k="Completed in 30 days" v={cs.filter((c) => c.completed_at && c.completed_at >= since).length} />
+          <Stat k="Completed in 30 days" v={n('completed_30d')} />
         </div>
       )}
       <div className="card">

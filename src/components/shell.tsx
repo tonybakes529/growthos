@@ -41,9 +41,14 @@ function build(defs: Def[], ctx: OrgContext): NavItem[] {
 }
 
 export async function Shell({ children, orgSlug }: { children: ReactNode; orgSlug?: string }) {
-  const session = await getSession();
+  // All three lookups need only the login cookie, so they go out together: one database round trip before the
+  // page frame (and its loading state) can paint, where this used to be two back to back.
+  const [session, ws, ctx] = await Promise.all([
+    getSession(),
+    getMyWorkspaces({}),
+    orgSlug ? requireOrg(orgSlug).catch(() => null) : null,
+  ]);
   if (!session) redirect('/login');
-  const [ws, ctx] = await Promise.all([getMyWorkspaces({}), orgSlug ? requireOrg(orgSlug).catch(() => null) : null]);
   const groups: NavGroup[] = !ctx ? []
     : isLearner(ctx) ? [{ items: build(LEARNER, ctx) }]
     : [{ items: build(MAIN, ctx) }, { label: 'Manage', items: build(MANAGE, ctx) }].filter((g) => g.items.length);

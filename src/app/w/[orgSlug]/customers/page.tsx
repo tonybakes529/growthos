@@ -21,10 +21,17 @@ export default async function Customers({ params, searchParams }: {
     return (<><PageHead sub={ctx.name} title="Customers" /><div className="card muted">You don&apos;t have access to customers.</div></>);
   }
   const status = CUSTOMER_STATUSES.find((s) => s === sp.status);
-  const [all, jar] = await Promise.all([listCustomers({ orgSlug }), cookies()]);
+  const programId = sp.course && /^[0-9a-f-]{36}$/i.test(sp.course) ? sp.course : undefined;
+  // The database does the filtering and the counting. This used to download every customer (capped at 500)
+  // and filter them here, so the list and the counters went wrong past 500 customers.
+  const countOf = (s: string) => ctx.sb.from('customer_onboardings').select('id', { count: 'exact', head: true })
+    .eq('organization_id', ctx.organizationId).eq('status', s);
+  const [all, jar, ...counts] = await Promise.all([
+    listCustomers({ orgSlug, programId, status }), cookies(), ...CUSTOMER_STATUSES.map(countOf),
+  ]);
   const data = all.ok ? all.data : { programs: [], customers: [] };
-  const rows = data.customers.filter((c) => (!sp.course || c.program_id === sp.course) && (!status || c.status === status));
-  const count = (s: string) => data.customers.filter((c) => c.status === s).length;
+  const rows = sp.course && !programId ? [] : data.customers;
+  const count = (s: string) => counts[CUSTOMER_STATUSES.indexOf(s as (typeof CUSTOMER_STATUSES)[number])]?.count ?? 0;
   const link = jar.get(LINK_COOKIE)?.value;
   const emailOn = !!getEnv().RESEND_API_KEY;
 
@@ -120,7 +127,7 @@ export default async function Customers({ params, searchParams }: {
                 <td>{day(c.completed_at)}</td>
               </tr>
             ))}
-            {!rows.length && <tr><td colSpan={6} className="muted">{data.customers.length ? 'No customers match this filter.' : 'No customers yet. They appear here automatically when someone buys a course, or use "Add customer" to add one by hand.'}</td></tr>}
+            {!rows.length && <tr><td colSpan={6} className="muted">{CUSTOMER_STATUSES.some((s) => count(s) > 0) ? 'No customers match this filter.' : 'No customers yet. They appear here automatically when someone buys a course, or use "Add customer" to add one by hand.'}</td></tr>}
           </tbody>
         </table>
       </div>

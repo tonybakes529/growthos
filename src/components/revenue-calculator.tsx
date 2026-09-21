@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { Anton, Barlow } from 'next/font/google';
 import { calculate, type CalculatorPresets } from '@/modules/sales/calculator';
-import { renderRoiPng } from './roi-image';
 
 // Only used by the downloadable ROI image. preload off: nothing is fetched until someone presses Download.
 const anton = Anton({ subsets: ['latin'], weight: '400', display: 'swap', preload: false });
@@ -47,6 +46,8 @@ export function RevenueCalculator({ formId, inputs, presets: saved, name }: {
   async function download() {
     setBusy(true); setError(null);
     try {
+      // the image code loads on first click, not with the page
+      const { renderRoiPng } = await import('./roi-image');
       const blob = await renderRoiPng({ name, inputs: vals, presets, result: r, fonts: { display: anton.style.fontFamily, body: barlow.style.fontFamily } });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);

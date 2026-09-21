@@ -4,7 +4,7 @@ import { requireOrgPage, can, isLearner, type OrgContext } from '@/lib/auth/cont
 import { getQuestionnaire, submitQuestionnaire } from '@/modules/onboarding/actions';
 import { getPendingOnboarding } from '@/modules/customers/actions';
 import { listMyEnrollments } from '@/modules/enrollments/actions';
-import { getProgramOutline } from '@/modules/programs/actions';
+import { getMyOutlines, type Outline } from '@/modules/programs/actions';
 import { listTasks, setTaskStatus } from '@/modules/tasks/actions';
 import { done } from '@/components/flash';
 import { Bar, Flash, PageHead, Pill, Stat, day, dayTime, money } from '@/components/ui';
@@ -30,9 +30,11 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
 // ---------------------------------------------------------------------------------------------
 async function LearnerHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?: string } }) {
   const path = `/w/${ctx.slug}`;
-  const [pending, enrollments, tasks, calls] = await Promise.all([
+  const [pending, enrollments, outlineRes, tasks, calls] = await Promise.all([
     getPendingOnboarding({}),
     listMyEnrollments({ orgSlug: ctx.slug }),
+    // every active course's outline in the same round (this used to wait for the course list, then ask per course)
+    getMyOutlines({ orgSlug: ctx.slug }),
     listTasks({ orgSlug: ctx.slug, mine: true, statuses: ['todo', 'in_progress', 'blocked', 'in_review'], limit: 20 }),
     ctx.sb.from('coaching_sessions').select('id, title, scheduled_start').eq('organization_id', ctx.organizationId)
       .eq('status', 'scheduled').gte('scheduled_start', new Date().toISOString()).order('scheduled_start').limit(3),
@@ -42,12 +44,13 @@ async function LearnerHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; e
 
   const active = (enrollments.ok ? enrollments.data : []).filter((e) => e.status === 'active' || e.status === 'completed');
   // The outline RPC applies drip, sequencing and enrolment, so "next lesson" is always one they can actually open.
-  const outlines = await Promise.all(active.filter((e) => e.status === 'active').slice(0, 5).map(async (e) => ({ e, outline: await getProgramOutline({ programId: e.program_id }) })));
+  const outlineByCourse = outlineRes.ok ? outlineRes.data : new Map<string, Outline>();
   let next: { kind: 'lesson' | 'start' | 'locked'; href: string; title: string; sub: string } | null = null;
   let anyLessons = false;
-  for (const { e, outline } of outlines) {
-    if (!outline.ok) continue;
-    const lessons = outline.data.sections.flatMap((s) => s.modules.flatMap((m) => m.lessons));
+  for (const e of active.filter((x) => x.status === 'active').slice(0, 5)) {
+    const outline = outlineByCourse.get(e.program_id);
+    if (!outline) continue;
+    const lessons = outline.sections.flatMap((s) => s.modules.flatMap((m) => m.lessons));
     if (lessons.length) anyLessons = true;
     const open = lessons.find((l) => l.progress !== 'completed' && l.isAvailable);
     const course = e.program?.title ?? 'your course';
@@ -155,16 +158,17 @@ async function TeamHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?
   const seeKpis = can(ctx, 'kpis.read');
   const seeSales = can(ctx, 'sales.read');
 
-  const [myTasks, overdue, customers, scorecards, weekly, kpis, enrollments, courses, deals, calls, wins, blockers, q] = await Promise.all([
+  const [myTasks, overdue, countRes, scorecards, weekly, kpis, courses, calls, wins, blockers, q] = await Promise.all([
     listTasks({ orgSlug: ctx.slug, mine: true, statuses: ['todo', 'in_progress', 'blocked', 'in_review'], limit: 50 }),
-    listTasks({ orgSlug: ctx.slug, overdueOnly: true, limit: 100 }),
-    seeCustomers ? ctx.sb.from('customer_onboardings').select('status, program_id').eq('organization_id', org) : null,
+    // only the number is shown, so ask for a count instead of downloading up to 100 tasks with their assignees
+    ctx.sb.from('tasks').select('id', { count: 'exact', head: true }).eq('organization_id', org).is('deleted_at', null)
+      .lt('due_at', nowIso).not('status', 'in', '(done,canceled)'),
+    // customer, enrollment and open-deal numbers, counted in the database (this used to download all three tables)
+    seeCustomers || seeSales ? ctx.sb.schema('app').rpc('workspace_counts', { p_org: org }) : null,
     seeKpis ? ctx.sb.from('scorecards').select('id, name').eq('organization_id', org).is('deleted_at', null).limit(1) : null,
     seeKpis ? ctx.sb.from('weekly_scorecards').select('scorecard_id, status').eq('organization_id', org).eq('period_start', week) : null,
     seeKpis ? ctx.sb.from('kpi_latest_v').select('kpi_definition_id, kpi_name, unit, value, target_value, status, period_start').eq('organization_id', org) : null,
-    seeCustomers ? ctx.sb.from('program_enrollments').select('status, progress_percent').eq('organization_id', org).in('status', ['active', 'completed']) : null,
-    ctx.sb.from('programs').select('id, status, onboarding_form_id').eq('organization_id', org).is('deleted_at', null),
-    seeSales ? ctx.sb.from('opportunities').select('value_cents').eq('organization_id', org).eq('status', 'open').is('deleted_at', null) : null,
+    ctx.sb.from('programs').select('id, status').eq('organization_id', org).is('deleted_at', null),
     ctx.sb.from('coaching_sessions').select('id, title, scheduled_start').eq('organization_id', org).eq('status', 'scheduled').gte('scheduled_start', nowIso).order('scheduled_start').limit(3),
     ctx.sb.from('client_wins').select('id, title, occurred_on').eq('organization_id', org).is('deleted_at', null).order('occurred_on', { ascending: false }).limit(3),
     ctx.sb.from('client_blockers').select('id, title, severity').eq('organization_id', org).is('deleted_at', null).in('status', ['open', 'in_progress']).limit(5),
@@ -172,21 +176,22 @@ async function TeamHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?
   ]);
 
   const mine = myTasks.ok ? myTasks.data : [];
-  const overdueCount = overdue.ok ? overdue.data.length : 0;
-  const cs = customers?.data ?? [];
-  // "Not finished onboarding" only makes sense when their course actually has a form to fill in.
-  const withForm = new Set((courses.data ?? []).filter((c) => c.onboarding_form_id).map((c) => c.id));
-  const unfinished = cs.filter((c) => (c.status === 'registered' || c.status === 'in_progress') && withForm.has(c.program_id)).length;
-  const invited = cs.filter((c) => c.status === 'invited').length;
+  const overdueCount = overdue.count ?? 0;
+  const counts = (countRes?.data ?? {}) as Record<string, number | null>;
+  const n = (k: string, allowed: boolean) => (allowed ? Number(counts[k] ?? 0) : 0);
+  const customerCount = n('customers', seeCustomers), onboarded = n('completed', seeCustomers);
+  // "Not finished onboarding" only counts customers whose course actually has a form to fill in.
+  const unfinished = n('unfinished_with_form', seeCustomers);
+  const invited = n('invited', seeCustomers);
   const card = scorecards?.data?.[0] ?? null;
   const weekRow = card ? (weekly?.data ?? []).find((w) => w.scorecard_id === card.id) : null;
   const scorecardDue = !!card && (!weekRow || weekRow.status === 'open' || weekRow.status === 'missed');
   const offTrack = (kpis?.data ?? []).filter((k) => k.status === 'off_track').length;
-  const enr = enrollments?.data ?? [];
-  const avgProgress = enr.length ? Math.round(enr.reduce((s, e) => s + Number(e.progress_percent), 0) / enr.length) : null;
+  const enrolled = n('enrolled', seeCustomers);
+  const avgProgress = enrolled ? n('avg_progress', seeCustomers) : null;
   const published = (courses.data ?? []).filter((c) => c.status === 'published').length;
-  const dealCount = deals?.data?.length ?? 0;
-  const dealValue = (deals?.data ?? []).reduce((s, d) => s + (d.value_cents ?? 0), 0);
+  const dealCount = n('open_deals', seeSales);
+  const dealValue = n('open_value_cents', seeSales);
   const questionnaire = q?.ok ? q.data : null;
   const showQuestionnaire = questionnaire && !questionnaire.submitted_at;
   const now = Date.now();
@@ -265,11 +270,11 @@ async function TeamHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?
       <div className="grid g4">
         {seeCustomers && (
           <Link href={`${path}/customers`} style={{ textDecoration: 'none', color: 'inherit' }}>
-            <Stat k="Customers" v={cs.length} s={cs.length ? `${cs.filter((c) => c.status === 'completed').length} onboarded · ${unfinished + invited} in progress` : 'None yet'} />
+            <Stat k="Customers" v={customerCount} s={customerCount ? `${onboarded} onboarded · ${unfinished + invited} in progress` : 'None yet'} />
           </Link>
         )}
         <Link href={`${path}/programs`} style={{ textDecoration: 'none', color: 'inherit' }}>
-          <Stat k="Courses" v={published} s={seeCustomers ? (enr.length ? `${enr.length} enrolled · avg ${avgProgress}% complete` : 'No one enrolled yet') : `${(courses.data ?? []).length} total`} />
+          <Stat k="Courses" v={published} s={seeCustomers ? (enrolled ? `${enrolled} enrolled · avg ${avgProgress}% complete` : 'No one enrolled yet') : `${(courses.data ?? []).length} total`} />
         </Link>
         {seeKpis && (
           <Link href={`${path}/scorecard`} style={{ textDecoration: 'none', color: 'inherit' }}>

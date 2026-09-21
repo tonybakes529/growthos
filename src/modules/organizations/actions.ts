@@ -6,6 +6,7 @@ import { requireSession, requireSuperAdmin, requirePlatformStaff } from '@/lib/a
 import { requireOrg, assertCan } from '@/lib/auth/context';
 import { AppError, unwrap } from '@/lib/errors';
 import { getEnv } from '@/lib/env';
+import { createClient } from '@/lib/supabase/server';
 
 /** Platform: create a client workspace from an onboarding template and invite its admin. */
 export const createClientOrganization = action(
@@ -134,8 +135,13 @@ export const updateClientProfile = action(
 );
 
 export const getMyWorkspaces = action(z.object({}), async () => {
-  const { sb } = await requireSession();
-  return unwrap(await sb.schema('app').rpc('get_my_workspaces'));
+  // The RPC only needs the caller's JWT, so it runs beside the session lookup instead of after it
+  // (this is on every page load, in the layout). requireSession() still rejects a signed-out caller first.
+  const [, res] = await Promise.all([
+    requireSession(),
+    createClient().then((sb) => sb.schema('app').rpc('get_my_workspaces')),
+  ]);
+  return unwrap(res);
 });
 
 export const recordLogin = action(z.object({ orgSlug: zSlug.optional(), userAgent: z.string().max(400).optional() }), async (i) => {

@@ -35,13 +35,16 @@ export const endTeamAssignment = action(z.object({ orgSlug: zSlug, userId: zId }
 /** Internal team directory with each person's client assignments. */
 export const listInternalTeam = action(z.object({}), async () => {
   const { sb } = await requirePlatformStaff();
-  const [staff, assignments, profiles] = await Promise.all([
-    sb.from('platform_staff').select('user_id, role_id, status, title'),
+  // Each staff member's profile rides along with them. This used to download every profile on the platform
+  // (every client's customers included), and past 1,000 profiles staff lost their names in the dropdowns.
+  const [staff, assignments] = await Promise.all([
+    sb.from('platform_staff')
+      .select('user_id, role_id, status, title, user:users!platform_staff_user_id_fkey(profile:user_profiles!user_profiles_user_id_fkey(user_id, display_name, avatar_url))')
+      .overrideTypes<{ user_id: string; role_id: string; status: string; title: string | null;
+        user: { profile: { user_id: string; display_name: string | null; avatar_url: string | null } | null } | null }[], { merge: false }>(),
     sb.from('team_assignments').select('organization_id, user_id, role_id, is_primary, status').eq('status', 'active'),
-    sb.from('user_profiles').select('user_id, display_name, avatar_url'),
   ]);
   const byUser = new Map<string, { organization_id: string; role_id: string; is_primary: boolean }[]>();
   for (const a of unwrap(assignments)) byUser.set(a.user_id, [...(byUser.get(a.user_id) ?? []), a]);
-  const profileById = new Map(unwrap(profiles).map((p) => [p.user_id, p]));
-  return unwrap(staff).map((s) => ({ ...s, profile: profileById.get(s.user_id) ?? null, assignments: byUser.get(s.user_id) ?? [] }));
+  return unwrap(staff).map(({ user, ...s }) => ({ ...s, profile: user?.profile ?? null, assignments: byUser.get(s.user_id) ?? [] }));
 });

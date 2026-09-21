@@ -38,14 +38,13 @@ export const revokeInvitation = action(z.object({ invitationId: zId }), async ({
   return null;
 });
 
-export const listInvitations = action(z.object({ orgSlug: zSlug }), async ({ orgSlug }) => {
+export const listInvitations = action(z.object({ orgSlug: zSlug, pendingOnly: z.boolean().optional() }), async ({ orgSlug, pendingOnly }) => {
   const ctx = await requireOrg(orgSlug);
-  return unwrap(
-    await ctx.sb.from('invitations')
-      .select('id, email, status, expires_at, created_at, role_id, payload')
-      .eq('organization_id', ctx.organizationId)
-      .order('created_at', { ascending: false }),
-  );
+  let q = ctx.sb.from('invitations')
+    .select('id, email, status, expires_at, created_at, role_id')
+    .eq('organization_id', ctx.organizationId);
+  if (pendingOnly) q = q.eq('status', 'pending');
+  return unwrap(await q.order('created_at', { ascending: false }));
 });
 
 /** Public: used by the /invite/[token] page before sign-in. */

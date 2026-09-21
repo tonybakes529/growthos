@@ -11,12 +11,12 @@ export default async function SopPage({ params, searchParams }: { params: Promis
   const [{ orgSlug, sopId }, sp] = await Promise.all([params, searchParams]);
   const ctx = await requireOrgPage(orgSlug);
   if (!can(ctx, 'sops.read')) notFound();
-  const res = await getSop({ orgSlug, sopId });
+  const v = Number(sp.v);
+  const res = await getSop({ orgSlug, sopId, version: Number.isInteger(v) && v > 0 ? v : undefined });
   if (!res.ok) notFound();
-  const { sop, versions, current } = res.data;
+  const { sop, versions, current, shown } = res.data;
   const list = `/w/${orgSlug}/sops`;
   const path = `${list}/${sopId}`;
-  const shown = (sp.v && versions.find((x) => String(x.version) === sp.v)) || current;
   const edit = can(ctx, 'sops.update');
   // The editor shows the video link in its own field; the first line of the body holds it when present.
   const rawBody = (current?.body ?? '').replace(/\\n/g, '\n');

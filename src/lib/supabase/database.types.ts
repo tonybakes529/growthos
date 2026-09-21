@@ -993,6 +993,7 @@ export type Database = {
       get_onboarding_questionnaire: { Args: { p_organization_id: string }; Returns: Json };
       get_org_context: { Args: { p_slug: string }; Returns: Json };
       get_pending_onboarding: { Args: Record<PropertyKey, never>; Returns: Json };
+      get_my_outlines: { Args: { p_org: string }; Returns: { program_id: string | null; section_id: string | null; section_title: string | null; section_position: number | null; module_id: string | null; module_title: string | null; module_position: number | null; lesson_id: string | null; lesson_title: string | null; lesson_position: number | null; estimated_minutes: number | null; is_available: boolean | null; unlocks_at: string | null; lock_reason: string | null; progress_status: string | null; completed_at: string | null }[] };
       get_program_outline: { Args: { p_program_id: string }; Returns: { section_id: string | null; section_title: string | null; section_position: number | null; module_id: string | null; module_title: string | null; module_position: number | null; lesson_id: string | null; lesson_title: string | null; lesson_position: number | null; estimated_minutes: number | null; is_available: boolean | null; unlocks_at: string | null; lock_reason: string | null; progress_status: string | null; completed_at: string | null }[] };
       get_session_context: { Args: Record<PropertyKey, never>; Returns: Json };
       invite_member: { Args: { p_organization_id: string; p_email: string; p_role_key: string; p_program_ids?: string[]; p_message?: string }; Returns: Json };
@@ -1023,6 +1024,7 @@ export type Database = {
       update_goal_progress: { Args: { p_goal_id: string; p_current_value: number; p_status?: string }; Returns: undefined };
       upsert_custom_role: { Args: { p_organization_id: string; p_key: string; p_name: string; p_permission_keys: string[]; p_description?: string }; Returns: string };
       upsert_kpi_entry: { Args: { p_kpi_definition_id: string; p_date: string; p_value: number; p_note?: string }; Returns: Json };
+      workspace_counts: { Args: { p_org: string }; Returns: Json };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

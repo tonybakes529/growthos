@@ -75,28 +75,39 @@ export const upsertKpiEntry = action(
   },
 );
 
-/** Load a scorecard for a given week: KPIs, this week's values, and status. */
-export const getWeeklyScorecard = action(z.object({ orgSlug: zSlug, scorecardId: zId, weekOf: zDate }), async (i) => {
+/**
+ * Load a scorecard for a given week: KPIs, this week's values, and status. Without a scorecardId it loads the
+ * workspace's scorecard. Everything is fetched by workspace in a single round and matched up here, where it
+ * used to be three rounds (find the scorecard, load its parts, then load the KPI definitions).
+ * Returns null when the workspace has no scorecard.
+ */
+export const getWeeklyScorecard = action(z.object({ orgSlug: zSlug, scorecardId: zId.optional(), weekOf: zDate }), async (i) => {
   const ctx = await requireOrg(i.orgSlug);
   assertCan(ctx, 'kpis.read');
+  const org = ctx.organizationId;
   const monday = new Date(`${i.weekOf}T00:00:00Z`);
   monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
   const weekStart = monday.toISOString().slice(0, 10);
-  const [card, links, week, entries] = await Promise.all([
-    ctx.sb.from('scorecards').select('id, name, description, due_weekday').eq('id', i.scorecardId).single(),
-    ctx.sb.from('scorecard_kpis').select('kpi_definition_id, position, is_required').eq('scorecard_id', i.scorecardId).order('position'),
-    ctx.sb.from('weekly_scorecards').select('*').eq('scorecard_id', i.scorecardId).eq('period_start', weekStart).maybeSingle(),
-    ctx.sb.from('kpi_entry_status_v').select('kpi_definition_id, value, target_value, previous_value, change_percent, status').eq('period_start', weekStart),
+  const cardQuery = ctx.sb.from('scorecards').select('id, name, description, due_weekday').eq('organization_id', org);
+  const [cards, links, weeks, entries, defRes] = await Promise.all([
+    i.scorecardId ? cardQuery.eq('id', i.scorecardId) : cardQuery.is('deleted_at', null).order('created_at').limit(1),
+    ctx.sb.from('scorecard_kpis').select('scorecard_id, kpi_definition_id, position, is_required').eq('organization_id', org).order('position'),
+    ctx.sb.from('weekly_scorecards').select('*').eq('organization_id', org).eq('period_start', weekStart),
+    // scoped to this workspace: without that, staff who can see many clients pulled every client's entries for the week
+    ctx.sb.from('kpi_entry_status_v').select('kpi_definition_id, value, target_value, previous_value, change_percent, status')
+      .eq('organization_id', org).eq('period_start', weekStart),
+    // RLS drops financial KPIs for users without financials.read
+    ctx.sb.from('kpi_definitions').select('id, key, name, unit, direction, goal_value, is_financial, entry_method').eq('organization_id', org),
   ]);
-  const kpiIds = unwrap(links).map((l) => l.kpi_definition_id);
-  // RLS drops financial KPIs for users without financials.read
-  const defs = kpiIds.length ? unwrap(await ctx.sb.from('kpi_definitions').select('id, key, name, unit, direction, goal_value, is_financial, entry_method').in('id', kpiIds)) : [];
+  const card = unwrap(cards)[0] ?? null;
+  if (!card) return null;
+  const defs = unwrap(defRes);
   const entryById = new Map(unwrap(entries).map((e) => [e.kpi_definition_id, e]));
   return {
-    scorecard: unwrap(card),
+    scorecard: card,
     weekStart,
-    submission: unwrap(week),
-    rows: unwrap(links).flatMap((l) => {
+    submission: unwrap(weeks).find((w) => w.scorecard_id === card.id) ?? null,
+    rows: unwrap(links).filter((l) => l.scorecard_id === card.id).flatMap((l) => {
       const def = defs.find((d) => d.id === l.kpi_definition_id);
       return def ? [{ ...def, isRequired: l.is_required, entry: entryById.get(def.id) ?? null }] : [];
     }),

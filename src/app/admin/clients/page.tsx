@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClientOrganization, getPlatformMetrics, listClients, setClientStatus } from '@/modules/organizations/actions';
@@ -13,6 +14,9 @@ const PATH = '/admin/clients';
 const STATUSES = ['onboarding', 'active', 'paused', 'suspended', 'archived'];
 
 type Row = Awaited<ReturnType<typeof listClients>> extends { ok: true; data: { rows: (infer R)[] } } | { ok: false; error: unknown } ? R : never;
+
+// Links into a workspace are never prefetched: a prefetch renders that workspace's layout (three database calls)
+// for every row on screen, and this page can list every client.
 
 /** Plain-language reasons a client is on the attention list, from the same signals the overview view uses. */
 function reasons(c: Row): string[] {
@@ -33,11 +37,13 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
   const session = await getSession();
   if (!session?.ctx.is_platform_staff && !session?.ctx.is_super_admin) redirect('/');
   const isSuper = Boolean(session?.ctx.is_super_admin);
-  const [res, metrics, templates, team, myTasks] = await Promise.all([
+  // Only what the top of the page shows is awaited here. The template library and staff directory (12 more queries)
+  // feed the forms at the bottom: they start now, alongside everything else, but <AdminTools> is the one that waits
+  // for them, inside Suspense, so they never hold up the client list.
+  const tools = isSuper ? Promise.all([listTemplates({}), listInternalTeam({})]) : null;
+  const [res, metrics, myTasks] = await Promise.all([
     listClients({ search: sp.q || undefined, statuses: sp.status ? [sp.status as 'active'] : undefined, sort: 'name' }),
     isSuper ? getPlatformMetrics({}) : null,
-    isSuper ? listTemplates({}) : null,
-    isSuper ? listInternalTeam({}) : null,
     listMyTasksEverywhere({}),
   ]);
   const m = metrics?.ok ? (metrics.data as Record<string, number | null>) : null;
@@ -51,46 +57,10 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
   const now = Date.now();
   const filtered = !!(sp.q || sp.status);
 
-  async function create(form: FormData) {
-    'use server';
-    const cents = (k: string) => (form.get(k) ? Math.round(Number(form.get(k)) * 100) : undefined);
-    const r = await createClientOrganization({
-      name: String(form.get('name')), slug: String(form.get('slug')).toLowerCase(),
-      adminEmail: String(form.get('adminEmail') || '') || undefined,
-      onboardingTemplateId: String(form.get('template') || '') || undefined,
-      accountManagerId: String(form.get('am') || '') || undefined,
-      coachId: String(form.get('coach') || '') || undefined,
-      profile: { industry: String(form.get('industry') || '') || undefined, mrrCents: cents('mrr'),
-        renewalDate: String(form.get('renewal') || '') || undefined, revenueTargetCents: cents('target') },
-    });
-    done(PATH, r, (d) => d.inviteUrl ? `Workspace created. Send the client admin this link: ${d.inviteUrl}` : 'Workspace created. Invite the client admin from its Team page when ready.');
-  }
   async function status(form: FormData) {
     'use server';
     done(PATH, await setClientStatus({ orgSlug: String(form.get('slug')), status: String(form.get('status')) as 'active' }), 'Status updated');
   }
-  async function bulk(form: FormData) {
-    'use server';
-    const [type, id] = String(form.get('template')).split(':');
-    const r = await applyTemplatesBulk({ items: [{ type: type as 'program', id: id! }], organizationIds: form.getAll('org').map(String) });
-    done(PATH, r, (d) => `Applied to ${d.applied} workspace(s)`);
-  }
-  async function recalc() {
-    'use server';
-    done(PATH, await recalculateAllHealth({}), (d) => `Health recalculated for ${d.clients} clients`);
-  }
-
-  const t = templates?.ok ? templates.data : null;
-  const staff = team?.ok ? team.data : [];
-  const templateOptions = t ? [
-    ...t.program.map((x) => ({ v: `program:${x.id}`, l: `Course: ${x.name}` })),
-    ...t.scorecard.map((x) => ({ v: `scorecard:${x.id}`, l: `Scorecard: ${x.name}` })),
-    ...t.dashboard.map((x) => ({ v: `dashboard:${x.id}`, l: `Dashboard: ${x.name}` })),
-    ...t.sop.map((x) => ({ v: `sop:${x.id}`, l: `SOP: ${x.name}` })),
-    ...t.offer.map((x) => ({ v: `offer:${x.id}`, l: `Offer: ${x.name}` })),
-    ...t.task.map((x) => ({ v: `task:${x.id}`, l: `Tasks: ${x.name}` })),
-  ] : [];
-
   return (
     <>
       <PageHead sub="Growth OS" title={isSuper ? 'All clients' : 'My clients'}>
@@ -114,9 +84,9 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
           <ul className="attn">
             {attention.slice(0, 8).map(({ c, why }) => (
               <li key={c.organization_id}>
-                <span><Link href={`/w/${c.slug}`}><b>{c.name}</b></Link>
+                <span><Link prefetch={false} href={`/w/${c.slug}`}><b>{c.name}</b></Link>
                   <div className="why" style={{ marginTop: 4 }}>{why.map((w) => <Pill key={w} value={/critical|overdue/.test(w) ? 'critical' : 'at_risk'} label={w} />)}</div></span>
-                <Link className="btn small" href={`/w/${c.slug}`}>Open</Link>
+                <Link prefetch={false} className="btn small" href={`/w/${c.slug}`}>Open</Link>
               </li>
             ))}
           </ul>
@@ -130,7 +100,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
             <ul className="attn">
               {renewals.map((c) => (
                 <li key={c.organization_id}>
-                  <span><Link href={`/w/${c.slug}`}>{c.name}</Link><div className="muted">{money(c.mrr_cents)} / mo</div></span>
+                  <span><Link prefetch={false} href={`/w/${c.slug}`}>{c.name}</Link><div className="muted">{money(c.mrr_cents)} / mo</div></span>
                   <Pill value={(c.days_to_renewal ?? 99) <= 30 ? 'at_risk' : 'none'} label={`${day(c.renewal_date)} · ${c.days_to_renewal}d`} />
                 </li>
               ))}
@@ -145,7 +115,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
                 const overdue = tk.due_at && Date.parse(tk.due_at) < now;
                 return (
                   <li key={tk.id}>
-                    <span>{tk.workspace ? <Link href={`/w/${tk.workspace.slug}/tasks?view=mine`}>{tk.title}</Link> : tk.title}
+                    <span>{tk.workspace ? <Link prefetch={false} href={`/w/${tk.workspace.slug}/tasks?view=mine`}>{tk.title}</Link> : tk.title}
                       <div className="muted">{tk.workspace?.name ?? ''}</div></span>
                     {tk.due_at ? <Pill value={overdue ? 'overdue' : 'none'} label={overdue ? `overdue · ${day(tk.due_at)}` : day(tk.due_at)} /> : <span className="muted">No date</span>}
                   </li>
@@ -172,7 +142,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
             <tbody>
               {rows.map((c) => (
                 <tr key={c.organization_id}>
-                  <td><Link href={`/w/${c.slug}`}><b>{c.name}</b></Link>{c.industry && <div className="muted">{c.industry}</div>}</td>
+                  <td><Link prefetch={false} href={`/w/${c.slug}`}><b>{c.name}</b></Link>{c.industry && <div className="muted">{c.industry}</div>}</td>
                   <td><Pill value={c.status} /></td>
                   <td>{c.health_score != null ? <Pill value={c.health_band} label={`${Math.round(c.health_score)} · ${c.health_band?.replace('_', ' ')}`} /> : <span className="muted">not scored</span>}</td>
                   <td>{money(c.mrr_cents)}</td>
@@ -196,50 +166,100 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
         </div>
       </div>
 
-      {isSuper && (
-        <>
-          <form id="new" className="card" action={create} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div><h2 style={{ marginBottom: 4 }}>New client workspace</h2>
-              <p className="muted" style={{ margin: 0 }}>Creates the workspace, copies the chosen template into it, invites the client admin and assigns your team. Only the name and slug are required.</p></div>
-            <div className="grid g2" style={{ gap: 10 }}>
-              <label className="f">Company name<input name="name" required /></label>
-              <label className="f">URL slug<input name="slug" pattern="[a-z0-9][a-z0-9\-]+" placeholder="acme-co" required /></label>
-              <label className="f">Client admin email <span className="muted" style={{ fontWeight: 400 }}>(optional, sends the invite)</span><input name="adminEmail" type="email" /></label>
-              <label className="f">Industry<input name="industry" /></label>
-              <label className="f">MRR ($)<input name="mrr" type="number" min="0" /></label>
-              <label className="f">Revenue target / mo ($)<input name="target" type="number" min="0" /></label>
-              <label className="f">Renewal date<input name="renewal" type="date" /></label>
-              <label className="f">Onboarding template
-                <select name="template"><option value="">Default</option>{t?.onboarding.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
-              <label className="f">Account manager
-                <select name="am"><option value="">None</option>{staff.map((s) => <option key={s.user_id} value={s.user_id}>{s.profile?.display_name ?? s.user_id}</option>)}</select></label>
-              <label className="f">Coach
-                <select name="coach"><option value="">None</option>{staff.map((s) => <option key={s.user_id} value={s.user_id}>{s.profile?.display_name ?? s.user_id}</option>)}</select></label>
-            </div>
-            <div><button className="btn primary" type="submit">Create workspace</button></div>
-          </form>
-
-          <details className="card">
-            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>More tools: apply templates in bulk, recalculate health</summary>
-            <div className="grid g2" style={{ marginTop: 14 }}>
-              <form action={bulk} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <h3 style={{ margin: 0 }}>Apply a template to clients</h3>
-                <label className="f">Template<select name="template" required>{templateOptions.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}</select></label>
-                <fieldset style={{ border: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <legend className="muted">Workspaces</legend>
-                  {live.map((c) => <label key={c.organization_id} className="row"><input type="checkbox" name="org" value={c.organization_id ?? ''} /> {c.name}</label>)}
-                </fieldset>
-                <div><button className="btn" type="submit">Apply template</button></div>
-              </form>
-              <form action={recalc} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <h3 style={{ margin: 0 }}>Health scores</h3>
-                <p className="muted" style={{ margin: 0 }}>Scores refresh nightly. Recalculate now after changing a client&apos;s data.</p>
-                <div><button className="btn" type="submit">Recalculate health</button></div>
-              </form>
-            </div>
-          </details>
-        </>
+      {tools && (
+        <Suspense fallback={<div id="new" className="card muted">Loading workspace tools…</div>}>
+          <AdminTools data={tools} clients={live.map((c) => ({ id: c.organization_id ?? '', name: c.name ?? '' }))} />
+        </Suspense>
       )}
+    </>
+  );
+}
+
+/** New-client form and bulk tools. Super admin only; rendered inside Suspense so its 12 lookups never delay the page above it. */
+async function AdminTools({ data, clients }: {
+  data: Promise<[Awaited<ReturnType<typeof listTemplates>>, Awaited<ReturnType<typeof listInternalTeam>>]>;
+  clients: { id: string; name: string }[];
+}) {
+  const [templates, team] = await data;
+
+  async function create(form: FormData) {
+    'use server';
+    const cents = (k: string) => (form.get(k) ? Math.round(Number(form.get(k)) * 100) : undefined);
+    const r = await createClientOrganization({
+      name: String(form.get('name')), slug: String(form.get('slug')).toLowerCase(),
+      adminEmail: String(form.get('adminEmail') || '') || undefined,
+      onboardingTemplateId: String(form.get('template') || '') || undefined,
+      accountManagerId: String(form.get('am') || '') || undefined,
+      coachId: String(form.get('coach') || '') || undefined,
+      profile: { industry: String(form.get('industry') || '') || undefined, mrrCents: cents('mrr'),
+        renewalDate: String(form.get('renewal') || '') || undefined, revenueTargetCents: cents('target') },
+    });
+    done(PATH, r, (d) => d.inviteUrl ? `Workspace created. Send the client admin this link: ${d.inviteUrl}` : 'Workspace created. Invite the client admin from its Team page when ready.');
+  }
+  async function bulk(form: FormData) {
+    'use server';
+    const [type, id] = String(form.get('template')).split(':');
+    const r = await applyTemplatesBulk({ items: [{ type: type as 'program', id: id! }], organizationIds: form.getAll('org').map(String) });
+    done(PATH, r, (d) => `Applied to ${d.applied} workspace(s)`);
+  }
+  async function recalc() {
+    'use server';
+    done(PATH, await recalculateAllHealth({}), (d) => `Health recalculated for ${d.clients} clients`);
+  }
+
+  const t = templates.ok ? templates.data : null;
+  const staff = team.ok ? team.data : [];
+  const templateOptions = t ? [
+    ...t.program.map((x) => ({ v: `program:${x.id}`, l: `Course: ${x.name}` })),
+    ...t.scorecard.map((x) => ({ v: `scorecard:${x.id}`, l: `Scorecard: ${x.name}` })),
+    ...t.dashboard.map((x) => ({ v: `dashboard:${x.id}`, l: `Dashboard: ${x.name}` })),
+    ...t.sop.map((x) => ({ v: `sop:${x.id}`, l: `SOP: ${x.name}` })),
+    ...t.offer.map((x) => ({ v: `offer:${x.id}`, l: `Offer: ${x.name}` })),
+    ...t.task.map((x) => ({ v: `task:${x.id}`, l: `Tasks: ${x.name}` })),
+  ] : [];
+
+  return (
+    <>
+      <form id="new" className="card" action={create} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div><h2 style={{ marginBottom: 4 }}>New client workspace</h2>
+          <p className="muted" style={{ margin: 0 }}>Creates the workspace, copies the chosen template into it, invites the client admin and assigns your team. Only the name and slug are required.</p></div>
+        <div className="grid g2" style={{ gap: 10 }}>
+          <label className="f">Company name<input name="name" required /></label>
+          <label className="f">URL slug<input name="slug" pattern="[a-z0-9][a-z0-9\-]+" placeholder="acme-co" required /></label>
+          <label className="f">Client admin email <span className="muted" style={{ fontWeight: 400 }}>(optional, sends the invite)</span><input name="adminEmail" type="email" /></label>
+          <label className="f">Industry<input name="industry" /></label>
+          <label className="f">MRR ($)<input name="mrr" type="number" min="0" /></label>
+          <label className="f">Revenue target / mo ($)<input name="target" type="number" min="0" /></label>
+          <label className="f">Renewal date<input name="renewal" type="date" /></label>
+          <label className="f">Onboarding template
+            <select name="template"><option value="">Default</option>{t?.onboarding.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
+          <label className="f">Account manager
+            <select name="am"><option value="">None</option>{staff.map((s) => <option key={s.user_id} value={s.user_id}>{s.profile?.display_name ?? s.user_id}</option>)}</select></label>
+          <label className="f">Coach
+            <select name="coach"><option value="">None</option>{staff.map((s) => <option key={s.user_id} value={s.user_id}>{s.profile?.display_name ?? s.user_id}</option>)}</select></label>
+        </div>
+        <div><button className="btn primary" type="submit">Create workspace</button></div>
+      </form>
+
+      <details className="card">
+        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>More tools: apply templates in bulk, recalculate health</summary>
+        <div className="grid g2" style={{ marginTop: 14 }}>
+          <form action={bulk} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <h3 style={{ margin: 0 }}>Apply a template to clients</h3>
+            <label className="f">Template<select name="template" required>{templateOptions.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}</select></label>
+            <fieldset style={{ border: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <legend className="muted">Workspaces</legend>
+              {clients.map((c) => <label key={c.id} className="row"><input type="checkbox" name="org" value={c.id} /> {c.name}</label>)}
+            </fieldset>
+            <div><button className="btn" type="submit">Apply template</button></div>
+          </form>
+          <form action={recalc} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <h3 style={{ margin: 0 }}>Health scores</h3>
+            <p className="muted" style={{ margin: 0 }}>Scores refresh nightly. Recalculate now after changing a client&apos;s data.</p>
+            <div><button className="btn" type="submit">Recalculate health</button></div>
+          </form>
+        </div>
+      </details>
     </>
   );
 }

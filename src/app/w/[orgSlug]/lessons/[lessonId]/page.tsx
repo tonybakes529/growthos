@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { requireOrgPage, can } from '@/lib/auth/context';
 import { getLesson, upsertLessonBlock, addVideoBlock } from '@/modules/programs/actions';
 import { completeLesson } from '@/modules/enrollments/actions';
-import { getQuiz, submitAssignment, submitQuizAttempt } from '@/modules/assignments/actions';
+import { submitAssignment, submitQuizAttempt } from '@/modules/assignments/actions';
 import { done } from '@/components/flash';
 import { Flash, PageHead, Pill } from '@/components/ui';
 
@@ -14,15 +14,8 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
   const path = `/w/${orgSlug}/lessons/${lessonId}`;
   const res = await getLesson({ lessonId });
   if (!res.ok) return <Flash err={res.error.message} />;
+  // quizzes and assignments arrive with their questions and the viewer's own attempts and submissions
   const { lesson, blocks, resources, assignments, quizzes, locked } = res.data;
-  const [quizData, subRes] = await Promise.all([
-    Promise.all(quizzes.map((q) => getQuiz({ quizId: q.id }))),
-    assignments.length
-      ? ctx.sb.from('assignment_submissions').select('assignment_id, status, submitted_at')
-          .in('assignment_id', assignments.map((a) => a.id)).eq('user_id', ctx.ctx.effective_user_id)
-      : null,
-  ]);
-  const mySubs = subRes?.data ?? [];
 
   async function complete() {
     'use server';
@@ -92,7 +85,7 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
       </div>
 
       {assignments.map((a) => {
-        const sub = mySubs.filter((s) => s.assignment_id === a.id).at(-1);
+        const sub = a.submissions.at(-1);
         return (
           <form key={a.id} className="card" action={submit} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div className="row" style={{ justifyContent: 'space-between' }}><h2 style={{ margin: 0 }}>Assignment: {a.title}</h2>{sub && <Pill value={sub.status} />}</div>
@@ -105,11 +98,11 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
         );
       })}
 
-      {quizData.map((q) => q.ok && (
-        <form key={q.data.quiz.id} className="card" action={quiz} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <h2>Quiz: {q.data.quiz.title} <span className="muted">(pass {q.data.quiz.pass_percent}%)</span></h2>
-          <input type="hidden" name="quiz" value={q.data.quiz.id} />
-          {q.data.questions.map((qq) => (
+      {quizzes.map((q) => (
+        <form key={q.id} className="card" action={quiz} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <h2>Quiz: {q.title} <span className="muted">(pass {q.pass_percent}%)</span></h2>
+          <input type="hidden" name="quiz" value={q.id} />
+          {q.questions.map((qq) => (
             <fieldset key={qq.id} style={{ border: 0, padding: 0 }}>
               <legend><b>{qq.prompt}</b></legend>
               {qq.question_type === 'short_answer'
@@ -119,7 +112,7 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
                 ))}
             </fieldset>
           ))}
-          {!!q.data.attempts.length && <div className="muted">Last attempt: {q.data.attempts.at(-1)?.score_percent}% {q.data.attempts.at(-1)?.passed ? '(passed)' : ''}</div>}
+          {!!q.attempts.length && <div className="muted">Last attempt: {q.attempts.at(-1)?.score_percent}% {q.attempts.at(-1)?.passed ? '(passed)' : ''}</div>}
           <div><button className="btn" type="submit">Submit quiz</button></div>
         </form>
       ))}

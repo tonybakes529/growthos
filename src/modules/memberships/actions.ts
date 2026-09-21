@@ -7,36 +7,42 @@ import { requireSession } from '@/lib/auth/session';
 import { unwrap } from '@/lib/errors';
 import type { Permission } from '@/lib/permissions/keys';
 
-/** Members + assigned staff with profile data (two queries; no cross-schema embedding). */
+type Role = { id: string; key: string; name: string };
+type Profile = { user_id: string; display_name: string | null; first_name: string | null; last_name: string | null; avatar_url: string | null; job_title: string | null };
+type Person = { id: string; email: string | null; last_login_at: string | null; profile: Profile | null };
+const PERSON = 'id, email, last_login_at, profile:user_profiles!user_profiles_user_id_fkey(user_id, display_name, first_name, last_name, avatar_url, job_title)';
+
+/**
+ * Members + assigned staff with profile data. Members arrive with their login, profile and role embedded. Staff
+ * need one more request: they link to users through platform_staff, which client users cannot read, so the embed
+ * would come back empty for them.
+ */
 export const listMembers = action(z.object({ orgSlug: zSlug }), async ({ orgSlug }) => {
   const ctx = await requireOrg(orgSlug);
   assertCan(ctx, 'members.read');
-  const [members, staff, roles] = await Promise.all([
-    ctx.sb.from('organization_memberships').select('id, user_id, role_id, status, title, joined_at, last_active_at')
-      .eq('organization_id', ctx.organizationId).neq('status', 'removed'),
-    ctx.sb.from('team_assignments').select('id, user_id, role_id, is_primary, status')
-      .eq('organization_id', ctx.organizationId).eq('status', 'active'),
-    ctx.sb.from('roles').select('id, key, name'),
+  const [members, staff] = await Promise.all([
+    ctx.sb.from('organization_memberships')
+      .select(`id, user_id, status, title, joined_at, last_active_at, role:roles!organization_memberships_role_id_fkey(id, key, name), user:users!organization_memberships_user_id_fkey(${PERSON})`)
+      .eq('organization_id', ctx.organizationId).neq('status', 'removed')
+      .overrideTypes<{ id: string; user_id: string; status: string; title: string | null; joined_at: string | null; last_active_at: string | null;
+        role: Role | null; user: Person | null }[], { merge: false }>(),
+    ctx.sb.from('team_assignments').select('id, user_id, is_primary, status, role:roles!team_assignments_role_id_fkey(id, key, name)')
+      .eq('organization_id', ctx.organizationId).eq('status', 'active')
+      .overrideTypes<{ id: string; user_id: string; is_primary: boolean; status: string; role: Role | null }[], { merge: false }>(),
   ]);
-  const m = unwrap(members), s = unwrap(staff), r = unwrap(roles);
-  const ids = [...new Set([...m, ...s].map((x) => x.user_id))];
-  const profiles = ids.length
-    ? unwrap(await ctx.sb.from('user_profiles').select('user_id, display_name, first_name, last_name, avatar_url, job_title').in('user_id', ids))
+  const m = unwrap(members), s = unwrap(staff);
+  const staffIds = [...new Set(s.map((x) => x.user_id))];
+  const staffPeople = staffIds.length
+    ? unwrap(await ctx.sb.from('users').select(PERSON).in('id', staffIds).overrideTypes<Person[], { merge: false }>())
     : [];
-  const users = ids.length ? unwrap(await ctx.sb.from('users').select('id, email, last_login_at').in('id', ids)) : [];
-  const roleById = new Map(r.map((x) => [x.id, x]));
-  const profileById = new Map(profiles.map((p) => [p.user_id, p]));
-  const userById = new Map(users.map((u) => [u.id, u]));
-  const shape = (userId: string, roleId: string) => ({
-    userId,
-    email: userById.get(userId)?.email ?? null,
-    lastLoginAt: userById.get(userId)?.last_login_at ?? null,
-    profile: profileById.get(userId) ?? null,
-    role: roleById.get(roleId) ?? null,
-  });
+  const personById = new Map<string, Person>([...staffPeople, ...m.flatMap((x) => (x.user ? [x.user] : []))].map((p) => [p.id, p]));
+  const shape = (userId: string, role: Role | null) => {
+    const p = personById.get(userId);
+    return { userId, email: p?.email ?? null, lastLoginAt: p?.last_login_at ?? null, profile: p?.profile ?? null, role };
+  };
   return {
-    members: m.map((x) => ({ membershipId: x.id, status: x.status, title: x.title, joinedAt: x.joined_at, ...shape(x.user_id, x.role_id) })),
-    staff: s.map((x) => ({ assignmentId: x.id, isPrimary: x.is_primary, ...shape(x.user_id, x.role_id) })),
+    members: m.map((x) => ({ membershipId: x.id, status: x.status, title: x.title, joinedAt: x.joined_at, ...shape(x.user_id, x.role) })),
+    staff: s.map((x) => ({ assignmentId: x.id, isPrimary: x.is_primary, ...shape(x.user_id, x.role) })),
   };
 });
 

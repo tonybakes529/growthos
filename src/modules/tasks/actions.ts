@@ -8,6 +8,17 @@ import { unwrap } from '@/lib/errors';
 
 const zStatus = z.enum(['todo', 'in_progress', 'blocked', 'in_review', 'done', 'canceled']);
 
+// named so the embedded joins stay unambiguous if another relationship between these tables is ever added
+const ASSIGNMENT_FK = 'task_assignments_organization_id_task_id_fkey';
+const TASK_COLUMNS = 'id, title, status, priority, task_type, visibility, due_at, completed_at, related_type, related_id, growth_project_id, parent_task_id, created_at';
+type TaskRow = {
+  id: string; title: string; status: string; priority: string; task_type: string; visibility: string; due_at: string | null;
+  completed_at: string | null; related_type: string | null; related_id: string | null; growth_project_id: string | null;
+  parent_task_id: string | null; created_at: string;
+};
+/** Drops the helper join column ("mine") that an inner-joined request carries. */
+const pickTask = (t: TaskRow & { mine?: unknown }): TaskRow => { const { mine: _mine, ...rest } = t; return rest; };
+
 export const createTask = action(
   z.object({
     orgSlug: zSlug,
@@ -81,20 +92,18 @@ export const listTasks = action(
   }),
   async (i) => {
     const ctx = await requireOrg(i.orgSlug);
+    // One request: assignees ride along as an embedded resource, and "mine" is an inner join on the same table.
+    // (This used to be up to three round trips: my assignment ids, then the tasks, then their assignees.)
     let q = ctx.sb.from('tasks')
-      .select('id, title, status, priority, task_type, visibility, due_at, completed_at, related_type, related_id, growth_project_id, parent_task_id, created_at')
+      .select(`${TASK_COLUMNS}, assignees:task_assignments!${ASSIGNMENT_FK}(user_id)${i.mine ? `, mine:task_assignments!${ASSIGNMENT_FK}!inner(user_id)` : ''}`)
       .eq('organization_id', ctx.organizationId).is('deleted_at', null);
-    if (i.mine) {
-      const mine = unwrap(await ctx.sb.from('task_assignments').select('task_id').eq('user_id', ctx.ctx.effective_user_id));
-      q = q.in('id', mine.map((m) => m.task_id));
-    }
+    if (i.mine) q = q.eq('mine.user_id', ctx.ctx.effective_user_id);
     if (i.statuses?.length) q = q.in('status', i.statuses);
     if (i.overdueOnly) q = q.lt('due_at', new Date().toISOString()).not('status', 'in', '(done,canceled)');
-    const tasks = unwrap(await q.order('due_at', { ascending: true, nullsFirst: false }).limit(i.limit));
-    const assignments = tasks.length
-      ? unwrap(await ctx.sb.from('task_assignments').select('task_id, user_id').in('task_id', tasks.map((t) => t.id)))
-      : [];
-    return tasks.map((t) => ({ ...t, assigneeIds: assignments.filter((a) => a.task_id === t.id).map((a) => a.user_id) }));
+    // the generated types carry no relationships, so the embedded shape is declared here
+    const tasks = unwrap(await q.order('due_at', { ascending: true, nullsFirst: false }).limit(i.limit)
+      .overrideTypes<(TaskRow & { assignees: { user_id: string }[] })[], { merge: false }>());
+    return tasks.map(({ assignees, ...t }) => ({ ...pickTask(t), assigneeIds: assignees.map((a) => a.user_id) }));
   },
 );
 
@@ -104,12 +113,12 @@ export const listTasks = action(
  */
 export const listMyTasksEverywhere = action(z.object({ limit: z.number().int().min(1).max(100).default(20) }), async ({ limit }) => {
   const { sb, ctx } = await requireSession();
-  const mine = unwrap(await sb.from('task_assignments').select('task_id').eq('user_id', ctx.effective_user_id));
-  if (!mine.length) return [];
-  const tasks = unwrap(await sb.from('tasks').select('id, organization_id, title, status, priority, due_at')
-    .in('id', mine.map((m) => m.task_id)).is('deleted_at', null).not('status', 'in', '(done,canceled)')
-    .order('due_at', { ascending: true, nullsFirst: false }).limit(limit));
-  const orgIds = [...new Set(tasks.map((t) => t.organization_id))];
-  const orgs = orgIds.length ? unwrap(await sb.from('organizations').select('id, name, slug').in('id', orgIds)) : [];
-  return tasks.map((t) => ({ ...t, workspace: orgs.find((o) => o.id === t.organization_id) ?? null }));
+  // One request instead of three (my assignment ids, then the tasks, then their workspaces).
+  const tasks = unwrap(await sb.from('tasks')
+    .select('id, organization_id, title, status, priority, due_at, mine:task_assignments!task_assignments_organization_id_task_id_fkey!inner(user_id), workspace:organizations!tasks_organization_id_fkey(id, name, slug)')
+    .eq('mine.user_id', ctx.effective_user_id).is('deleted_at', null).not('status', 'in', '(done,canceled)')
+    .order('due_at', { ascending: true, nullsFirst: false }).limit(limit)
+    .overrideTypes<{ id: string; organization_id: string; title: string; status: string; priority: string; due_at: string | null;
+      mine: unknown; workspace: { id: string; name: string; slug: string } | null }[], { merge: false }>());
+  return tasks.map(({ mine: _mine, ...t }) => t);
 });
