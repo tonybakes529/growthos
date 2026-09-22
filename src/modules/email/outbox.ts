@@ -26,16 +26,18 @@ export const resendProvider: EmailProvider = {
  * person is waiting on the email (an invitation). Never throws and never blocks the page for long: if the
  * provider is not configured, is slow or fails, the message simply stays queued and the cron retries it.
  */
-export async function sendQueuedNow(toEmail: string, timeoutMs = 5000): Promise<void> {
+export async function sendQueuedNow(toEmail: string, timeoutMs = 5000): Promise<boolean> {
   const env = getEnv();
-  if (!env.RESEND_API_KEY || !env.EMAIL_FROM || !env.SUPABASE_SERVICE_ROLE_KEY) return;
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM || !env.SUPABASE_SERVICE_ROLE_KEY) return false;
   try {
-    await Promise.race([
+    const result = await Promise.race([
       drainEmailOutbox(resendProvider, 5, toEmail),
-      new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
     ]);
+    return !!result && result.sent > 0;
   } catch (e) {
     console.error('[email] immediate send failed, left queued', e);
+    return false;
   }
 }
 
