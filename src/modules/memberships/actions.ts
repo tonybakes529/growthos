@@ -1,11 +1,98 @@
 import 'server-only';
 
+import { randomInt } from 'node:crypto';
 import { z } from 'zod';
 import { action, zId, zSlug } from '@/lib/action';
-import { requireOrg, assertCan } from '@/lib/auth/context';
+import { requireOrg, assertCan, assertWritable } from '@/lib/auth/context';
 import { requireSession } from '@/lib/auth/session';
-import { unwrap } from '@/lib/errors';
+import { AppError, unwrap } from '@/lib/errors';
+import { getEnv } from '@/lib/env';
+import { createAdminClient } from '@/lib/supabase/admin';
 import type { Permission } from '@/lib/permissions/keys';
+
+// no l/1/0/O, so it survives being read down the phone or copied off a screen
+const ALPHABET = 'abcdefghijkmnopqrstuvwxyz23456789';
+const generatePassword = () =>
+  [0, 1, 2].map(() => Array.from({ length: 4 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('')).join('-');
+
+/**
+ * Creating a login and changing a password both need the service role key. Adding someone who already has a
+ * login does not, so this is only reached when a new account has to be made.
+ */
+function adminOrExplain() {
+  if (!getEnv().SUPABASE_SERVICE_ROLE_KEY) {
+    // 'conflict' rather than 'internal' so the admin sees what to fix instead of "Something went wrong"
+    throw new AppError('conflict', 'This workspace cannot create logins yet: add SUPABASE_SERVICE_ROLE_KEY to the app\'s environment variables (Vercel, and .env.local for local work), then try again.');
+  }
+  return createAdminClient();
+}
+
+const zPassword = z.string().min(10, 'Passwords need at least 10 characters').max(72).optional();
+
+/**
+ * Adds someone to the workspace and gives them a login, no invitation email needed. Creates the account when the
+ * email is new (already confirmed, so they can sign in at once) and returns the password once for the admin to
+ * pass on. An email that already has a login keeps its password and is simply added to the workspace.
+ */
+export const addMemberWithLogin = action(
+  z.object({
+    orgSlug: zSlug,
+    email: z.string().trim().toLowerCase().email(),
+    firstName: z.string().trim().max(100).optional(),
+    lastName: z.string().trim().max(100).optional(),
+    roleKey: z.string().regex(/^[a-z_]+$/),
+    password: zPassword,
+    programIds: z.array(zId).max(50).default([]),
+  }),
+  async (i) => {
+    const ctx = await requireOrg(i.orgSlug);
+    assertWritable(ctx);
+    assertCan(ctx, 'members.create');
+
+    // someone outside this workspace is invisible to the caller's row-level security, so the database looks
+    // them up (members.create required). An existing login needs no service role key at all.
+    let userId = unwrap(await ctx.sb.schema('app').rpc('user_id_for_email', {
+      p_organization_id: ctx.organizationId, p_email: i.email,
+    })) as string | null;
+    let password: string | null = null;
+    if (!userId) {
+      const admin = adminOrExplain();
+      password = i.password ?? generatePassword();
+      const { data, error } = await admin.auth.admin.createUser({
+        email: i.email,
+        password,
+        email_confirm: true,   // no confirmation email to wait for
+        user_metadata: { first_name: i.firstName ?? '', last_name: i.lastName ?? '' },
+      });
+      if (error || !data.user) throw new AppError('validation', error?.message ?? 'Could not create that login');
+      userId = data.user.id;
+    }
+
+    // back to the caller's own permissions: role limits and workspace access are checked in the database
+    const res = unwrap(await ctx.sb.schema('app').rpc('add_member_now', {
+      p_organization_id: ctx.organizationId, p_user_id: userId, p_role_key: i.roleKey, p_program_ids: i.programIds,
+    })) as { membership_id: string; user_id: string; email: string };
+    return { email: res.email, password, hadLogin: !password };
+  },
+);
+
+/** Sets a member's password when they are locked out. Who may do this is decided in the database. */
+export const setMemberPassword = action(
+  z.object({ orgSlug: zSlug, userId: zId, password: zPassword }),
+  async (i) => {
+    const ctx = await requireOrg(i.orgSlug);
+    assertWritable(ctx);
+    assertCan(ctx, 'members.update');
+    const admin = adminOrExplain();
+    const target = unwrap(await ctx.sb.schema('app').rpc('member_for_password_reset', {
+      p_organization_id: ctx.organizationId, p_user_id: i.userId,
+    })) as { user_id: string; email: string };
+    const password = i.password ?? generatePassword();
+    const { error } = await admin.auth.admin.updateUserById(target.user_id, { password, email_confirm: true });
+    if (error) throw new AppError('internal', error.message);
+    return { email: target.email, password };
+  },
+);
 
 type Role = { id: string; key: string; name: string };
 type Profile = { user_id: string; display_name: string | null; first_name: string | null; last_name: string | null; avatar_url: string | null; job_title: string | null };

@@ -7,6 +7,7 @@ import { requireSession } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 import { unwrap } from '@/lib/errors';
 import { getEnv } from '@/lib/env';
+import { sendQueuedNow } from '@/modules/email/outbox';
 
 export const inviteMember = action(
   z.object({
@@ -28,6 +29,8 @@ export const inviteMember = action(
         p_message: i.message,
       }),
     ) as { invitation_id: string; token: string };
+    // the person is waiting on this one, so it goes out now rather than on the nightly drain
+    await sendQueuedNow(i.email);
     return { invitationId: res.invitation_id, inviteUrl: `${getEnv().NEXT_PUBLIC_APP_URL}/invite/${res.token}` };
   },
 );
