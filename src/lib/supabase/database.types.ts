@@ -999,6 +999,9 @@ export type Database = {
       get_onboarding_questionnaire: { Args: { p_organization_id: string }; Returns: Json };
       get_org_context: { Args: { p_slug: string }; Returns: Json };
       get_pending_onboarding: { Args: Record<PropertyKey, never>; Returns: Json };
+      user_id_for_email: { Args: { p_organization_id: string; p_email: string }; Returns: string | null };
+      add_member_now: { Args: { p_organization_id: string; p_user_id: string; p_role_key: string; p_program_ids?: string[] }; Returns: Json };
+      member_for_password_reset: { Args: { p_organization_id: string; p_user_id: string }; Returns: Json };
       get_my_outlines: { Args: { p_org: string }; Returns: { program_id: string | null; section_id: string | null; section_title: string | null; section_position: number | null; module_id: string | null; module_title: string | null; module_position: number | null; lesson_id: string | null; lesson_title: string | null; lesson_position: number | null; estimated_minutes: number | null; is_available: boolean | null; unlocks_at: string | null; lock_reason: string | null; progress_status: string | null; completed_at: string | null }[] };
       get_program_outline: { Args: { p_program_id: string }; Returns: { section_id: string | null; section_title: string | null; section_position: number | null; module_id: string | null; module_title: string | null; module_position: number | null; lesson_id: string | null; lesson_title: string | null; lesson_position: number | null; estimated_minutes: number | null; is_available: boolean | null; unlocks_at: string | null; lock_reason: string | null; progress_status: string | null; completed_at: string | null }[] };
       get_session_context: { Args: Record<PropertyKey, never>; Returns: Json };

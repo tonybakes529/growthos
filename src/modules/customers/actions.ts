@@ -6,6 +6,7 @@ import { requireOrg, assertCan, can } from '@/lib/auth/context';
 import { requireSession } from '@/lib/auth/session';
 import { unwrap, unwrapRequired } from '@/lib/errors';
 import { getEnv } from '@/lib/env';
+import { sendQueuedNow } from '@/modules/email/outbox';
 import { safeColor, type AnswerValue, type Branding, type FormQuestion } from '@/modules/onboarding-forms/types';
 
 export const CUSTOMER_STATUSES = ['invited', 'registered', 'in_progress', 'completed'] as const;
@@ -127,6 +128,8 @@ export const addCustomer = action(
       p_organization_id: ctx.organizationId, p_program_id: i.programId, p_email: i.email,
       p_first_name: i.firstName, p_last_name: i.lastName,
     })) as { onboarding_id: string; status: 'invited' | 'enrolled'; accept_path?: string };
+    // the customer is waiting on their welcome email, so it goes out now rather than on the nightly drain
+    await sendQueuedNow(i.email);
     return {
       onboardingId: res.onboarding_id,
       status: res.status,

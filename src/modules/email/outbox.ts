@@ -21,6 +21,24 @@ export const resendProvider: EmailProvider = {
   },
 };
 
+/**
+ * Sends anything queued for one address right now, instead of leaving it for the nightly cron. Used where a
+ * person is waiting on the email (an invitation). Never throws and never blocks the page for long: if the
+ * provider is not configured, is slow or fails, the message simply stays queued and the cron retries it.
+ */
+export async function sendQueuedNow(toEmail: string, timeoutMs = 5000): Promise<void> {
+  const env = getEnv();
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM || !env.SUPABASE_SERVICE_ROLE_KEY) return;
+  try {
+    await Promise.race([
+      drainEmailOutbox(resendProvider, 5, toEmail),
+      new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+    ]);
+  } catch (e) {
+    console.error('[email] immediate send failed, left queued', e);
+  }
+}
+
 const escape = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
 const fill = (tpl: string, vars: Record<string, unknown>, html: boolean) =>
   tpl.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => {
@@ -29,10 +47,12 @@ const fill = (tpl: string, vars: Record<string, unknown>, html: boolean) =>
   });
 
 /** Drains email_outbox. Org-specific templates override platform defaults by key. */
-export async function drainEmailOutbox(provider: EmailProvider = resendProvider, limit = 50) {
+export async function drainEmailOutbox(provider: EmailProvider = resendProvider, limit = 50, toEmail?: string) {
   const admin = createAdminClient();
-  const { data: queue } = await admin.from('email_outbox').select('*')
-    .eq('status', 'queued').lte('send_after', new Date().toISOString()).order('id').limit(limit);
+  let q = admin.from('email_outbox').select('*')
+    .eq('status', 'queued').lte('send_after', new Date().toISOString());
+  if (toEmail) q = q.eq('to_email', toEmail.toLowerCase());
+  const { data: queue } = await q.order('id').limit(limit);
   let sent = 0, failed = 0;
   for (const m of queue ?? []) {
     const { data: claimed } = await admin.from('email_outbox').update({ status: 'sending', attempts: m.attempts + 1 })
