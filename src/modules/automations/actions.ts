@@ -47,7 +47,7 @@ export const createOnboardingAlert = action(
         recipient: i.recipient,
         title: '{{payload.email}} completed onboarding',
         body: '{{payload.program_title}}',
-        link_path: '/customers',
+        link_path: '/students',
       },
     });
     if (step.error) {

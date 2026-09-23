@@ -275,9 +275,9 @@ export type Database = {
         Relationships: [];
       };
       customer_onboardings: {
-        Row: { id: string; organization_id: string; program_id: string; form_id: string | null; contact_id: string | null; email: string; user_id: string | null; invitation_id: string | null; purchase_id: string | null; status: string; invited_at: string; registered_at: string | null; started_at: string | null; completed_at: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null };
-        Insert: { id?: string; organization_id: string; program_id: string; form_id?: string | null; contact_id?: string | null; email: string; user_id?: string | null; invitation_id?: string | null; purchase_id?: string | null; status?: string; invited_at?: string; registered_at?: string | null; started_at?: string | null; completed_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
-        Update: { id?: string; organization_id?: string; program_id?: string; form_id?: string | null; contact_id?: string | null; email?: string; user_id?: string | null; invitation_id?: string | null; purchase_id?: string | null; status?: string; invited_at?: string; registered_at?: string | null; started_at?: string | null; completed_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
+        Row: { id: string; organization_id: string; program_id: string | null; form_id: string | null; contact_id: string | null; email: string; user_id: string | null; invitation_id: string | null; purchase_id: string | null; status: string; invited_at: string; registered_at: string | null; started_at: string | null; completed_at: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null };
+        Insert: { id?: string; organization_id: string; program_id?: string | null; form_id?: string | null; contact_id?: string | null; email: string; user_id?: string | null; invitation_id?: string | null; purchase_id?: string | null; status?: string; invited_at?: string; registered_at?: string | null; started_at?: string | null; completed_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
+        Update: { id?: string; organization_id?: string; program_id?: string | null; form_id?: string | null; contact_id?: string | null; email?: string; user_id?: string | null; invitation_id?: string | null; purchase_id?: string | null; status?: string; invited_at?: string; registered_at?: string | null; started_at?: string | null; completed_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
         Relationships: [];
       };
       dashboard_templates: {
@@ -605,9 +605,9 @@ export type Database = {
         Relationships: [];
       };
       organizations: {
-        Row: { id: string; kind: string; name: string; slug: string; status: string; timezone: string; currency: string; logo_url: string | null; website: string | null; stripe_customer_id: string | null; settings: Json; archived_at: string | null; suspended_at: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null };
-        Insert: { id?: string; kind?: string; name: string; slug: string; status?: string; timezone?: string; currency?: string; logo_url?: string | null; website?: string | null; stripe_customer_id?: string | null; settings?: Json; archived_at?: string | null; suspended_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
-        Update: { id?: string; kind?: string; name?: string; slug?: string; status?: string; timezone?: string; currency?: string; logo_url?: string | null; website?: string | null; stripe_customer_id?: string | null; settings?: Json; archived_at?: string | null; suspended_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Row: { id: string; kind: string; name: string; slug: string; status: string; timezone: string; currency: string; logo_url: string | null; website: string | null; stripe_customer_id: string | null; settings: Json; default_onboarding_form_id: string | null; archived_at: string | null; suspended_at: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null };
+        Insert: { id?: string; kind?: string; name: string; slug: string; status?: string; timezone?: string; currency?: string; logo_url?: string | null; website?: string | null; stripe_customer_id?: string | null; settings?: Json; default_onboarding_form_id?: string | null; archived_at?: string | null; suspended_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Update: { id?: string; kind?: string; name?: string; slug?: string; status?: string; timezone?: string; currency?: string; logo_url?: string | null; website?: string | null; stripe_customer_id?: string | null; settings?: Json; default_onboarding_form_id?: string | null; archived_at?: string | null; suspended_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
         Relationships: [];
       };
       payment_records: {
@@ -1018,6 +1018,8 @@ export type Database = {
       review_submission: { Args: { p_submission_id: string; p_status: string; p_feedback?: string; p_grade?: number }; Returns: undefined };
       revoke_enrollment: { Args: { p_enrollment_id: string }; Returns: undefined };
       revoke_invitation: { Args: { p_invitation_id: string }; Returns: undefined };
+      remind_onboarding: { Args: { p_onboarding_id: string }; Returns: Json };
+      reopen_onboarding: { Args: { p_onboarding_id: string }; Returns: Json };
       save_onboarding_answers: { Args: { p_onboarding_id: string; p_answers: Json; p_submit?: boolean }; Returns: Json };
       set_organization_status: { Args: { p_organization_id: string; p_status: string; p_reason?: string }; Returns: undefined };
       set_permission_override: { Args: { p_organization_id: string; p_user_id: string; p_permission_key: string; p_effect: string; p_reason?: string; p_expires_at?: string }; Returns: undefined };

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { getMyWorkspaces } from '@/modules/organizations/actions';
-import { getPendingOnboarding } from '@/modules/customers/actions';
+import { getPendingOnboarding } from '@/modules/students/actions';
 
 export default async function Home() {
   const session = await getSession();

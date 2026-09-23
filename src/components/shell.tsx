@@ -14,7 +14,7 @@ type Def = { path: string; label: string; needs?: Permission; unless?: Permissio
 // enforce the same permissions again; this only stops people being sent to dead ends.
 const MAIN: Def[] = [
   { path: '', label: 'Home' },
-  { path: '/customers', label: 'Customers', needs: 'enrollments.read' },
+  { path: '/students', label: 'Students', needs: 'enrollments.read', also: ['/customers'] },
   { path: '/programs', label: 'Courses', also: ['/lessons', '/onboarding'] },
   { path: '/sops', label: 'SOPs', needs: 'sops.read' },
   { path: '/scorecard', label: 'Growth', needs: 'kpis.read', also: ['/pipeline', '/setter-assets'] },

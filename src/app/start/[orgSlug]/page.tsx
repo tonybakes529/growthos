@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
-import { getMyOnboarding, saveOnboardingAnswers } from '@/modules/customers/actions';
+import { getMyOnboarding, saveOnboardingAnswers } from '@/modules/students/actions';
 import { answersFromForm } from '@/modules/onboarding-forms/types';
 import { BrandFrame, OnboardingFields } from '@/components/onboarding-form';
 import { OnboardingAutosave } from '@/components/onboarding-autosave';
@@ -19,7 +19,8 @@ export default async function Start({ params, searchParams }: { params: Promise<
   const ob = res.ok ? res.data : null;
   if (!ob) redirect(`/w/${orgSlug}`);
   const { onboarding, organization, program, form, questions, answers } = ob;
-  const course = `/w/${orgSlug}/programs/${program.id}`;
+  // program is null when this is the workspace intake form rather than one attached to a course
+  const next = program ? `/w/${orgSlug}/programs/${program.id}` : `/w/${orgSlug}`;
 
   async function submit(data: FormData) {
     'use server';
@@ -42,8 +43,8 @@ export default async function Start({ params, searchParams }: { params: Promise<
           <h1>You&apos;re all set{ob.first_name ? `, ${ob.first_name}` : ''}.</h1>
           <p className="lead">{form.completion_message || `Thanks. ${organization.name} has everything they need to get you started.`}</p>
         </div>
-        <div className="enrolled"><div className="k">Your program</div><div className="v">{program.title}</div></div>
-        <Link className="btn primary" href={course}>Go to {program.title}</Link>
+        {program && <div className="enrolled"><div className="k">Your program</div><div className="v">{program.title}</div></div>}
+        <Link className="btn primary" href={next}>{program ? `Go to ${program.title}` : `Go to ${organization.name}`}</Link>
       </BrandFrame>
     );
   }
@@ -52,7 +53,7 @@ export default async function Start({ params, searchParams }: { params: Promise<
     <BrandFrame brand={organization}>
       <div>
         <h1>{form.welcome_heading || `Welcome${ob.first_name ? `, ${ob.first_name}` : ''}.`}</h1>
-        <p className="lead">{form.welcome_message || `Let's get you set up for ${program.title}.`}</p>
+        <p className="lead">{form.welcome_message || (program ? `Let's get you set up for ${program.title}.` : `Let's get you set up with ${organization.name}.`)}</p>
       </div>
       <Flash err={err} msg={msg} />
       <form id="onboarding" action={submit} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
