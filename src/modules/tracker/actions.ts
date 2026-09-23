@@ -18,10 +18,13 @@ export type TrackerLead = {
   follow_up_attempts: number; notes: string | null;
 };
 export type Tracker = {
-  week_start: string; week_end: string;
+  week_start: string; week_end: string; today: string;
   scorecard: { id: string; name: string } | null;
   student: { user_id: string; email: string; name: string } | null;
-  rows: TrackerRow[];
+  /** One entry per day of the week, in order, each holding that day's figures. */
+  days: { date: string; rows: TrackerRow[] }[];
+  /** The same rows for the whole week, worked out from the week's totals rather than by adding up days. */
+  week: TrackerRow[];
   leads: TrackerLead[];
   objections: { id: string; label: string; count: number }[];
 };
@@ -38,11 +41,11 @@ export const getTracker = action(
 );
 
 export const saveTrackerValue = action(
-  z.object({ kpiId: zId, week: zDate, value: z.number().finite().nullable(), userId: zId.optional() }),
-  async ({ kpiId, week, value, userId }) => {
+  z.object({ kpiId: zId, day: zDate, value: z.number().finite().nullable(), userId: zId.optional() }),
+  async ({ kpiId, day, value, userId }) => {
     const { sb } = await requireSession();
     unwrap(await sb.schema('app').rpc('save_tracker_value', {
-      p_kpi_id: kpiId, p_week: week, p_value: value, p_user: userId ?? undefined,
+      p_kpi_id: kpiId, p_day: day, p_value: value, p_user: userId ?? undefined,
     }));
     return null;
   },

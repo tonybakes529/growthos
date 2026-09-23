@@ -22,10 +22,11 @@ export default async function MyTracker({ params, searchParams }: {
   async function saveValues(form: FormData) {
     'use server';
     const week = String(form.get('week'));
-    const entries = [...form.entries()].filter(([k]) => k.startsWith('v_'));
-    for (const [k, v] of entries) {
+    // every typed cell is named v_<kpiId>_<YYYY-MM-DD>, one per day
+    for (const [k, v] of [...form.entries()].filter(([k]) => k.startsWith('v_'))) {
+      const day = k.slice(-10);
       const value = String(v).trim();
-      const r = await saveTrackerValue({ kpiId: k.slice(2), week, value: value === '' ? null : Number(value) });
+      const r = await saveTrackerValue({ kpiId: k.slice(2, -11), day, value: value === '' ? null : Number(value) });
       if (!r.ok) { revalidatePath(path); redirect(`${path}?week=${week}&err=${encodeURIComponent(r.error.message)}`); }
     }
     revalidatePath(path);

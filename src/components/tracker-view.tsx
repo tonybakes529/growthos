@@ -5,6 +5,9 @@ import { Modal } from '@/components/modal';
 import { Flash, PageHead, Pill, day } from '@/components/ui';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+/** The date is a plain YYYY-MM-DD, so read it as UTC and never let a timezone shift the column. */
+const dayName = (d: string) => DAY_NAMES[(new Date(`${d}T12:00:00Z`).getUTCDay() + 6) % 7];
 const shift = (weekStart: string, days: number) => {
   const d = new Date(`${weekStart}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
@@ -13,8 +16,8 @@ const shift = (weekStart: string, days: number) => {
 
 /** How a row was filled, in the student's words rather than the database's. */
 const HOW: Record<string, string> = {
-  manual: 'you type this',
-  counted: 'counted from your leads',
+  manual: 'typed in',
+  counted: 'counted from the leads',
   calculated: 'worked out',
   automated: 'synced',
 };
@@ -76,7 +79,7 @@ export function TrackerView({ data, path, title, sub, back, mine, canEdit, canIn
   };
 }) {
   const week = data.week_start;
-  const manual = data.rows.filter((r) => r.entry_method === 'manual');
+  const manual = data.week.filter((r) => r.entry_method === 'manual');
   const totalObjections = data.objections.reduce((n, o) => n + Number(o.count), 0);
 
   if (!data.scorecard) {
@@ -115,45 +118,63 @@ export function TrackerView({ data, path, title, sub, back, mine, canEdit, canIn
               : 'Everything except Ad Spend is counted from the leads below.'}
       </p>
 
-      <div className="grid g2">
-        <form action={actions.saveValues} className="card">
-          <input type="hidden" name="week" value={week} />
-          <h2 style={{ marginTop: 0 }}>{mine ? 'Your numbers' : 'Their numbers'}</h2>
-          <div className="tablewrap">
-            <table>
-              <thead><tr><th>Metric</th><th>This week</th><th>Goal</th><th /></tr></thead>
-              <tbody>
-                {data.rows.map((r) => (
-                  <tr key={r.kpi_id}>
-                    <td><b>{r.name}</b><div className="muted" style={{ fontSize: 12 }}>{HOW[r.entry_method]}</div></td>
-                    <td>
-                      {r.entry_method === 'manual' && canEdit ? (
-                        <input name={`v_${r.kpi_id}`} type="number" step="any" style={{ width: 110 }}
-                               defaultValue={r.value ?? ''} aria-label={`${r.name} for week of ${week}`} />
-                      ) : <b>{formatKpi(r.value, r.unit)}</b>}
-                    </td>
-                    <td className="muted">{r.goal_value == null ? '—' : formatKpi(r.goal_value, r.unit)}</td>
-                    <td>{r.status && <Pill value={r.status} />}</td>
-                  </tr>
+      <form action={actions.saveValues} className="card">
+        <input type="hidden" name="week" value={week} />
+        <h2 style={{ marginTop: 0 }}>{mine ? 'Your numbers' : 'Their numbers'}</h2>
+        <div className="tablewrap">
+          <table className="tracker">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                {data.days.map((d) => (
+                  <th key={d.date} className={d.date === data.today ? 'today' : undefined}>
+                    {dayName(d.date)}<div className="muted">{d.date.slice(8)}</div>
+                  </th>
                 ))}
-              </tbody>
-            </table>
-          </div>
-          {canEdit && !!manual.length && (
-            <div style={{ marginTop: 10 }}><button className="btn primary" type="submit">Save</button></div>
-          )}
-        </form>
-
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>Why they said no</h2>
-          {!totalObjections && <p className="empty">No objections recorded this week.</p>}
-          <ul className="plain">
-            {data.objections.map((o) => (
-              <li key={o.id}><span>{o.label}</span><span><b>{o.count}</b></span></li>
-            ))}
-          </ul>
-          {!data.objections.length && <p className="muted" style={{ marginBottom: 0 }}>Your coach sets the objection list for this workspace.</p>}
+                <th className="total">Week</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.week.map((r) => (
+                <tr key={r.kpi_id}>
+                  <td><b>{r.name}</b><div className="muted" style={{ fontSize: 12 }}>{HOW[r.entry_method]}</div></td>
+                  {data.days.map((d) => {
+                    const cell = d.rows.find((x) => x.kpi_id === r.kpi_id);
+                    return (
+                      <td key={d.date} className={d.date === data.today ? 'today' : undefined}>
+                        {r.entry_method === 'manual' && canEdit ? (
+                          <input name={`v_${r.kpi_id}_${d.date}`} type="number" step="any" style={{ width: 84 }}
+                                 defaultValue={cell?.value ?? ''} aria-label={`${r.name} on ${d.date}`} />
+                        ) : formatKpi(cell?.value ?? null, r.unit)}
+                      </td>
+                    );
+                  })}
+                  <td className="total"><b>{formatKpi(r.value, r.unit)}</b>
+                    {r.status && <div><Pill value={r.status} /></div>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+        {canEdit && !!manual.length && (
+          <div style={{ marginTop: 10 }}>
+            <button className="btn primary" type="submit">Save</button>
+            <span className="muted" style={{ marginLeft: 10, fontSize: 13 }}>
+              Only the typed rows need saving. Everything else follows the leads below.
+            </span>
+          </div>
+        )}
+      </form>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Why they said no <span className="muted" style={{ fontWeight: 400 }}>· this week</span></h2>
+        {!totalObjections && <p className="empty">No objections recorded this week.</p>}
+        <ul className="plain">
+          {data.objections.map((o) => (
+            <li key={o.id}><span>{o.label}</span><span><b>{o.count}</b></span></li>
+          ))}
+        </ul>
+        {!data.objections.length && <p className="muted" style={{ marginBottom: 0 }}>Your coach sets the objection list for this workspace.</p>}
       </div>
 
       <div className="card">

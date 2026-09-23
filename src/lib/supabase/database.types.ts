@@ -1035,7 +1035,7 @@ export type Database = {
       get_tracker: { Args: { p_slug: string; p_week?: string; p_user?: string }; Returns: Json };
       install_student_tracker: { Args: { p_organization_id: string }; Returns: Json };
       save_lead: { Args: { p_org: string; p_lead: Json; p_user?: string }; Returns: Json };
-      save_tracker_value: { Args: { p_kpi_id: string; p_week: string; p_value: number | null; p_user?: string }; Returns: Json };
+      save_tracker_value: { Args: { p_kpi_id: string; p_day: string; p_value: number | null; p_user?: string }; Returns: Json };
       soft_delete: { Args: { p_table: string; p_id: string }; Returns: undefined };
       start_conversation: { Args: { p_organization_id: string; p_user_ids: string[]; p_subject?: string }; Returns: string };
       start_impersonation: { Args: { p_target_user: string; p_organization_id: string; p_reason: string; p_allow_writes?: boolean; p_minutes?: number }; Returns: string };
