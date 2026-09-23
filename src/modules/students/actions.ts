@@ -55,7 +55,8 @@ export const listStudents = action(
     // with a grouping RPC if a workspace ever gets near it.
     const [rowRes, programs, org] = await Promise.all([
       ctx.sb.from('customer_onboardings').select(`${SELECT}, ${CONTACT}`)
-        .eq('organization_id', ctx.organizationId).order('invited_at', { ascending: false }).limit(500)
+        .eq('organization_id', ctx.organizationId).is('deleted_at', null)
+        .order('invited_at', { ascending: false }).limit(500)
         .overrideTypes<RowWithContact[], { merge: false }>(),
       ctx.sb.from('programs').select('id, title, onboarding_form_id').eq('organization_id', ctx.organizationId).is('deleted_at', null).order('title'),
       ctx.sb.from('organizations').select('default_onboarding_form_id').eq('id', ctx.organizationId).single(),
@@ -126,7 +127,7 @@ export const getStudent = action(z.object({ orgSlug: zSlug, onboardingId: zId })
   // Round 1: everything that only needs the ids we already hold.
   const [recRes, orgPrograms, orgRow] = await Promise.all([
     ctx.sb.from('customer_onboardings').select(`${SELECT}, purchase_id, ${CONTACT}`)
-      .eq('id', onboardingId).eq('organization_id', ctx.organizationId).maybeSingle()
+      .eq('id', onboardingId).eq('organization_id', ctx.organizationId).is('deleted_at', null).maybeSingle()
       .overrideTypes<(Row & Named & { purchase_id: string | null }) | null, { merge: false }>(),
     ctx.sb.from('programs').select('id, title, onboarding_form_id').eq('organization_id', ctx.organizationId),
     ctx.sb.from('organizations').select('default_onboarding_form_id').eq('id', ctx.organizationId).single(),
@@ -139,7 +140,8 @@ export const getStudent = action(z.object({ orgSlug: zSlug, onboardingId: zId })
   // onboarding forms: the workspace intake plus any course that has its own.
   const [siblingRes, contact, invitation, enrollments, taskRows] = await Promise.all([
     ctx.sb.from('customer_onboardings').select(SELECT)
-      .eq('organization_id', ctx.organizationId).eq('email', rec.email).order('program_id', { nullsFirst: true })
+      .eq('organization_id', ctx.organizationId).eq('email', rec.email).is('deleted_at', null)
+      .order('program_id', { nullsFirst: true })
       .overrideTypes<Row[], { merge: false }>(),
     rec.contact_id ? ctx.sb.from('contacts').select('first_name, last_name, phone, company, lifecycle_stage').eq('id', rec.contact_id).maybeSingle() : null,
     rec.invitation_id && can(ctx, 'members.read')
@@ -250,6 +252,19 @@ export const nameStudent = action(
     return null;
   },
 );
+
+/**
+ * Takes someone off the students list: their onboarding records are soft-deleted, their enrolments are
+ * revoked, any unused invitation stops working, and their student membership here ends. Their answers are
+ * kept, so a super admin can still see what they wrote.
+ */
+export const removeStudent = action(z.object({ orgSlug: zSlug, onboardingId: zId }), async ({ orgSlug, onboardingId }) => {
+  const ctx = await requireOrg(orgSlug);
+  assertCan(ctx, 'enrollments.delete');
+  return unwrap(await ctx.sb.schema('app').rpc('remove_student', { p_onboarding_id: onboardingId })) as unknown as {
+    email: string; name: string; onboardings: number; enrollments: number; lost_access: boolean;
+  };
+});
 
 /** Nudges a student who has a login and an unfinished form. Goes out now rather than on the nightly drain. */
 export const remindOnboarding = action(z.object({ orgSlug: zSlug, onboardingId: zId }), async ({ orgSlug, onboardingId }) => {
