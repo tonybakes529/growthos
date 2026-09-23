@@ -6,6 +6,7 @@ import { addMemberWithLogin, changeMemberRole, listMembers, removeMember, setMem
 import { inviteMember, listInvitations, revokeInvitation } from '@/modules/invitations/actions';
 import { startImpersonation } from '@/modules/impersonation/actions';
 import { done } from '@/components/flash';
+import { Menu } from '@/components/menu';
 import { Modal } from '@/components/modal';
 import { Flash, PageHead, Pill, day } from '@/components/ui';
 
@@ -154,24 +155,33 @@ export default async function Team({ params, searchParams }: { params: Promise<{
                 <td><Pill value={m.status} /></td>
                 <td>{day(m.lastLoginAt)}</td>
                 <td>
-                  <div className="row">
-                    {can(ctx, 'members.update') && m.userId !== ctx.ctx.effective_user_id && (
-                      <Modal small label="Set password" title={`Set a password for ${m.email}`}>
-                        <form action={resetPassword}>
-                          <input type="hidden" name="user" value={m.userId} />
-                          <p className="muted" style={{ margin: 0 }}>Use this when someone cannot get in. Their old password stops working straight away.</p>
-                          <label className="f">Password <span className="muted" style={{ fontWeight: 400 }}>(optional: leave empty and one is generated)</span>
-                            <input name="password" type="text" minLength={10} maxLength={72} autoComplete="off" placeholder="Leave empty for a strong one" />
-                          </label>
-                          <div><button className="btn primary" type="submit">Set password</button></div>
-                        </form>
-                      </Modal>
-                    )}
-                    {canViewAs && <form action={viewAs}><input type="hidden" name="user" value={m.userId} /><button className="btn small" type="submit">View as</button></form>}
-                    {can(ctx, 'members.delete') && m.userId !== ctx.ctx.effective_user_id && (
-                      <form action={remove}><input type="hidden" name="id" value={m.membershipId} /><button className="btn small" type="submit">Remove</button></form>
-                    )}
-                  </div>
+                  {(() => {
+                    const self = m.userId === ctx.ctx.effective_user_id;
+                    const setPassword = can(ctx, 'members.update') && !self;
+                    const canRemove = can(ctx, 'members.delete') && !self;
+                    if (!setPassword && !canViewAs && !canRemove) return null;
+                    return (
+                      <Menu label={`Manage ${m.email}`}>
+                        {setPassword && (
+                          <Modal small label="Set password" title={`Set a password for ${m.email}`}>
+                            <form action={resetPassword}>
+                              <input type="hidden" name="user" value={m.userId} />
+                              <p className="muted" style={{ margin: 0 }}>Use this when someone cannot get in. Their old password stops working straight away.</p>
+                              <label className="f">Password <span className="muted" style={{ fontWeight: 400 }}>(optional: leave empty and one is generated)</span>
+                                <input name="password" type="text" minLength={10} maxLength={72} autoComplete="off" placeholder="Leave empty for a strong one" />
+                              </label>
+                              <div><button className="btn primary" type="submit">Set password</button></div>
+                            </form>
+                          </Modal>
+                        )}
+                        {canViewAs && <form action={viewAs}><input type="hidden" name="user" value={m.userId} /><button className="menu-item" type="submit">View as</button></form>}
+                        {canRemove && (<>
+                          <hr />
+                          <form action={remove}><input type="hidden" name="id" value={m.membershipId} /><button className="menu-item danger" type="submit">Remove from workspace</button></form>
+                        </>)}
+                      </Menu>
+                    );
+                  })()}
                 </td>
               </tr>
             ))}

@@ -5,6 +5,7 @@ import { getSop, markSopReviewed, publishSopVersion, updateSopMeta } from '@/mod
 import { softDelete } from '@/modules/records/actions';
 import { SopBody, SopSteps } from '@/modules/sops/render';
 import { done } from '@/components/flash';
+import { Menu, MenuNote } from '@/components/menu';
 import { Flash, PageHead, Pill, day, dayTime } from '@/components/ui';
 
 export default async function SopPage({ params, searchParams }: { params: Promise<{ orgSlug: string; sopId: string }>; searchParams: Promise<{ v?: string; msg?: string; err?: string }> }) {
@@ -58,6 +59,16 @@ export default async function SopPage({ params, searchParams }: { params: Promis
             <button className="btn" type="submit">{sop.status === 'active' ? 'Move to draft' : 'Mark active'}</button></form>
         )}
         {edit && <form action={reviewed}><button className="btn" type="submit">Mark reviewed</button></form>}
+        {can(ctx, 'sops.delete') && (
+          <Menu label="Manage this SOP">
+            {sop.status !== 'archived'
+              ? <form action={status}><input type="hidden" name="status" value="archived" /><button className="menu-item" type="submit">Archive</button></form>
+              : <form action={status}><input type="hidden" name="status" value="active" /><button className="menu-item" type="submit">Restore from archive</button></form>}
+            <hr />
+            <form action={remove}><button className="menu-item danger" type="submit">Delete SOP</button></form>
+            <MenuNote>Delete hides it. A super admin can restore it.</MenuNote>
+          </Menu>
+        )}
       </PageHead>
       <Flash msg={sp.msg} err={sp.err} />
       {sop.summary && <p className="muted" style={{ margin: 0, maxWidth: 760 }}>{sop.summary}</p>}
@@ -111,15 +122,6 @@ export default async function SopPage({ params, searchParams }: { params: Promis
                 <button className="btn" type="submit">Save details</button>
               </div>
             </form>
-            {can(ctx, 'sops.delete') && (
-              <details className="card"><summary style={{ cursor: 'pointer', color: 'var(--muted)' }}>Archive or delete</summary>
-                <div className="row" style={{ marginTop: 10 }}>
-                  {sop.status !== 'archived' && <form action={status}><input type="hidden" name="status" value="archived" /><button className="btn small" type="submit">Archive</button></form>}
-                  <form action={remove}><button className="btn small" type="submit">Delete</button></form>
-                  <span className="muted" style={{ fontSize: 12 }}>Delete hides it; a super admin can restore it.</span>
-                </div>
-              </details>
-            )}
           </>)}
         </div>
       </div>

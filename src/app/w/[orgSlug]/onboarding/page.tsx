@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { requireOrgPage, can } from '@/lib/auth/context';
 import { createForm, listForms, setWorkspaceIntakeForm } from '@/modules/onboarding-forms/actions';
 import { done } from '@/components/flash';
+import { Menu, MenuNote } from '@/components/menu';
 import { Flash, PageHead, Pill, day } from '@/components/ui';
 import { SubNav, coursesTabs } from '@/components/subnav';
 
@@ -71,7 +72,26 @@ export default async function OnboardingForms({ params, searchParams }: { params
           <div key={f.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <h2 style={{ margin: 0 }}><Link href={`${path}/${f.id}`}>{f.name}</Link></h2>
-              <Pill value={f.status === 'published' ? 'active' : f.status === 'archived' ? 'none' : 'pending'} label={f.status} />
+              <div className="row">
+                <Pill value={f.status === 'published' ? 'active' : f.status === 'archived' ? 'none' : 'pending'} label={f.status} />
+                {setIntake && (f.isIntake || (f.status === 'published' && !!f.questionCount)) && (
+                  <Menu label={`Manage ${f.name}`}>
+                    <Link className="menu-item" href={`${path}/${f.id}`}>Edit questions</Link>
+                    <hr />
+                    {f.isIntake ? (
+                      <>
+                        <form action={clearIntake}><button className="menu-item" type="submit">Stop using as the intake form</button></form>
+                        <MenuNote>Students already part way through keep the form they started.</MenuNote>
+                      </>
+                    ) : (
+                      <form action={useAsIntake}>
+                        <input type="hidden" name="id" value={f.id} />
+                        <button className="menu-item" type="submit">Use as the intake form</button>
+                      </form>
+                    )}
+                  </Menu>
+                )}
+              </div>
             </div>
             <div className="muted">{f.questionCount} question{f.questionCount === 1 ? '' : 's'} · updated {day(f.updated_at)}</div>
             <div>
@@ -80,12 +100,6 @@ export default async function OnboardingForms({ params, searchParams }: { params
                 : f.status !== 'published' ? <span className="muted">Draft, so nobody can see it yet</span>
                 : <span className="muted">Published but reaching nobody</span>}
             </div>
-            {setIntake && !f.isIntake && f.status === 'published' && !!f.questionCount && (
-              <form action={useAsIntake}>
-                <input type="hidden" name="id" value={f.id} />
-                <button className="btn small" type="submit">Use as the intake form for every student</button>
-              </form>
-            )}
           </div>
         ))}
         {!forms.length && <div className="card muted">No onboarding forms yet.</div>}

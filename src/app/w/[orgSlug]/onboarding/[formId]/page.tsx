@@ -6,6 +6,7 @@ import {
 } from '@/modules/onboarding-forms/actions';
 import { QUESTION_TYPES, QUESTION_TYPE_LABEL, hasOptions, type QuestionType } from '@/modules/onboarding-forms/types';
 import { done } from '@/components/flash';
+import { Menu, MenuNote } from '@/components/menu';
 import { Flash, PageHead, Pill } from '@/components/ui';
 
 const lines = (v: FormDataEntryValue | null) => String(v ?? '').split('\n').map((s) => s.trim()).filter(Boolean);
@@ -109,7 +110,18 @@ export default async function FormBuilder({ params, searchParams }: { params: Pr
                 </div>
               )}
               <div className="grow">
-                <div><b>{n + 1}. {q.label}</b> {q.is_required ? <Pill value="high" label="required" /> : <Pill value="none" label="optional" />}</div>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'start' }}>
+                  <div><b>{n + 1}. {q.label}</b> {q.is_required ? <Pill value="high" label="required" /> : <Pill value="none" label="optional" />}</div>
+                  {edit && (
+                    <Menu label={`Manage "${q.label}"`}>
+                      <form action={remove}>
+                        <input type="hidden" name="id" value={q.id} />
+                        <button className="menu-item danger" type="submit">Delete question</button>
+                      </form>
+                      <MenuNote>Answers already given stay on each student&apos;s record.</MenuNote>
+                    </Menu>
+                  )}
+                </div>
                 <div className="muted">{QUESTION_TYPE_LABEL[q.question_type]}{hasOptions(q.question_type) && `: ${q.options.join(' · ')}`}</div>
                 {q.help_text && <div className="muted">{q.help_text}</div>}
                 <div className="muted" style={{ fontSize: 12 }}>Automation key: <code>{q.key}</code></div>
@@ -120,11 +132,6 @@ export default async function FormBuilder({ params, searchParams }: { params: Pr
                       <input type="hidden" name="id" value={q.id} />
                       <QuestionFields q={q} />
                       <div className="row"><button className="btn small primary" type="submit">Save question</button></div>
-                    </form>
-                    <form action={remove} style={{ marginTop: 8 }}>
-                      <input type="hidden" name="id" value={q.id} />
-                      <button className="btn small" type="submit">Delete question</button>
-                      <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>Answers already given stay on each customer&apos;s record.</span>
                     </form>
                   </details>
                 )}
