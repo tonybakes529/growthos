@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { formatKpi, type Tracker, type TrackerLead } from '@/modules/tracker/actions';
+import { formatKpi, type Tracker, type TrackerLead, type TrackerRow } from '@/modules/tracker/actions';
 import { Menu } from '@/components/menu';
 import { Modal } from '@/components/modal';
 import { Flash, PageHead, Pill, day } from '@/components/ui';
@@ -56,11 +56,47 @@ function LeadFields({ lead, objections }: { lead?: TrackerLead; objections: Trac
   );
 }
 
+
+/** A plain SVG bar chart of one metric across the week. No library, no client JavaScript. */
+function WeekChart({ data, metric }: { data: Tracker; metric: TrackerRow }) {
+  const points = data.days.map((d) => ({
+    date: d.date,
+    value: Number(d.rows.find((r) => r.kpi_id === metric.kpi_id)?.value ?? 0),
+  }));
+  const peak = Math.max(...points.map((p) => p.value), 0);
+  const W = 560, H = 160, pad = 24, gap = 10;
+  const barW = (W - pad * 2 - gap * 6) / 7;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img"
+         aria-label={`${metric.name} for each day of the week beginning ${data.week_start}`}>
+      <line x1={pad} y1={H - pad} x2={W - pad} y2={H - pad} stroke="var(--line)" />
+      {points.map((p, i) => {
+        const h = peak > 0 ? Math.round((p.value / peak) * (H - pad * 2)) : 0;
+        const x = pad + i * (barW + gap);
+        const y = H - pad - h;
+        return (
+          <g key={p.date}>
+            {h > 0 && <rect x={x} y={y} width={barW} height={h} rx="3"
+                            fill={p.date === data.today ? 'var(--accent-2)' : 'var(--accent)'} />}
+            <text x={x + barW / 2} y={h > 16 ? y + 14 : y - 4} textAnchor="middle"
+                  fontSize="11" fill={h > 16 ? '#fff' : 'var(--muted)'}>
+              {p.value ? formatKpi(p.value, metric.unit) : ''}
+            </text>
+            <text x={x + barW / 2} y={H - pad + 14} textAnchor="middle" fontSize="11" fill="var(--muted)">
+              {dayName(p.date)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 /**
  * One student's week. The same view whether they are looking at their own or a coach is looking at theirs,
  * so there is only one thing to keep right. Server actions arrive already bound to the right student.
  */
-export function TrackerView({ data, path, title, sub, back, mine, canEdit, canInstall, flash, actions }: {
+export function TrackerView({ data, path, title, sub, back, mine, chartKey, canEdit, canInstall, flash, actions }: {
   data: Tracker;
   path: string;
   title: string;
@@ -68,11 +104,14 @@ export function TrackerView({ data, path, title, sub, back, mine, canEdit, canIn
   back?: { href: string; label: string };
   /** Whose tracker this is, so the page does not tell a coach these are "your" numbers. */
   mine: boolean;
+  /** Which row the graph plots, from ?chart= on the URL. */
+  chartKey?: string;
   canEdit: boolean;
   canInstall: boolean;
   flash: { msg?: string; err?: string };
   actions: {
     saveValues: (form: FormData) => Promise<void>;
+    logDay: (form: FormData) => Promise<void>;
     saveLead: (form: FormData) => Promise<void>;
     removeLead: (form: FormData) => Promise<void>;
     install?: () => Promise<void>;
@@ -81,6 +120,8 @@ export function TrackerView({ data, path, title, sub, back, mine, canEdit, canIn
   const week = data.week_start;
   const manual = data.week.filter((r) => r.entry_method === 'manual');
   const totalObjections = data.objections.reduce((n, o) => n + Number(o.count), 0);
+  const chartRow = data.week.find((r) => r.key === chartKey)
+    ?? data.week.find((r) => r.key === 'tracker_new_leads') ?? data.week[0] ?? null;
 
   if (!data.scorecard) {
     return (
@@ -114,9 +155,50 @@ export function TrackerView({ data, path, title, sub, back, mine, canEdit, canIn
       <Flash msg={flash.msg} err={flash.err} />
       <p className="muted" style={{ margin: 0 }}>
         Week of {day(week)} to {day(data.week_end)}.{' '}
-        {mine ? 'Log every lead below and these numbers look after themselves.'
+        {mine ? 'Log the day once and these numbers look after themselves.'
               : 'Everything except Ad Spend is counted from the leads below.'}
       </p>
+
+      {canEdit && (
+        <form action={actions.logDay} className="card next" key={`${data.today}-${data.leads.length}`}>
+          <h2 style={{ marginTop: 0 }}>Log the day</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            One go, at the end of the day: what you spent, and who came in. Everything else works itself out.
+          </p>
+          <div className="row" style={{ alignItems: 'end' }}>
+            <label className="f">Day<input name="day" type="date" defaultValue={data.today}
+                                           min={data.week_start} max={data.week_end} required /></label>
+            {manual.map((r) => (
+              <label className="f" key={r.kpi_id}>
+                {r.name}
+                <input name={`spend_${r.kpi_id}`} type="number" step="any" style={{ width: 130 }}
+                       placeholder="0" aria-label={`${r.name} for that day`} />
+              </label>
+            ))}
+          </div>
+          <label className="f">Leads that came in <span className="muted" style={{ fontWeight: 400 }}>(one per line)</span>
+            <textarea name="leads" rows={5} placeholder={'Dana Example, dana@example.com, 07700 900123\nsam@example.com\nPat Riley, pat@example.com'} />
+            <span className="qhelp">Name, email and phone in any order. An email on its own is fine. Mark who booked and converted in the table below as it happens.</span>
+          </label>
+          <div><button className="btn primary" type="submit">Log the day</button></div>
+        </form>
+      )}
+
+      {!!chartRow && (
+        <div className="card">
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <h2 style={{ margin: 0 }}>{chartRow.name} this week</h2>
+            <form action={path} className="row">
+              <input type="hidden" name="week" value={week} />
+              <select name="chart" defaultValue={chartRow.key} aria-label="Metric to graph">
+                {data.week.map((r) => <option key={r.kpi_id} value={r.key}>{r.name}</option>)}
+              </select>
+              <button className="btn small" type="submit">Show</button>
+            </form>
+          </div>
+          <WeekChart data={data} metric={chartRow} />
+        </div>
+      )}
 
       <form action={actions.saveValues} className="card">
         <input type="hidden" name="week" value={week} />
@@ -181,7 +263,7 @@ export function TrackerView({ data, path, title, sub, back, mine, canEdit, canIn
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0 }}>Leads this week ({data.leads.length})</h2>
           {canEdit && (
-            <Modal label="+ Add lead" title="Add a lead" primary>
+            <Modal label="+ One more lead" title="Add a lead" small>
               <form action={actions.saveLead}>
                 <LeadFields objections={data.objections} />
                 <div><button className="btn primary" type="submit">Add lead</button></div>
@@ -189,7 +271,7 @@ export function TrackerView({ data, path, title, sub, back, mine, canEdit, canIn
             </Modal>
           )}
         </div>
-        {!data.leads.length && <p className="empty">No leads logged for this week yet.</p>}
+        {!data.leads.length && <p className="empty">Nothing logged this week yet. Use &ldquo;Log the day&rdquo; above.</p>}
         <div className="tablewrap">
           {!!data.leads.length && (
             <table>

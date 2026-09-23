@@ -2,14 +2,14 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireOrgPage, can } from '@/lib/auth/context';
 import { getStudent } from '@/modules/students/actions';
-import { deleteLead, getTracker, installStudentTracker, saveLead, saveTrackerValue } from '@/modules/tracker/actions';
+import { deleteLead, getTracker, installStudentTracker, parseLeadLines, saveLead, saveTrackerValue } from '@/modules/tracker/actions';
 import { done } from '@/components/flash';
 import { TrackerView, leadFromForm } from '@/components/tracker-view';
 import { Flash, PageHead } from '@/components/ui';
 
 /** The same week, seen by a coach or client admin. Editing needs kpis.update; reading needs kpis.read. */
 export default async function StudentTracker({ params, searchParams }: {
-  params: Promise<{ orgSlug: string; studentId: string }>; searchParams: Promise<{ week?: string; msg?: string; err?: string }>;
+  params: Promise<{ orgSlug: string; studentId: string }>; searchParams: Promise<{ week?: string; chart?: string; msg?: string; err?: string }>;
 }) {
   const [{ orgSlug, studentId }, sp] = await Promise.all([params, searchParams]);
   const ctx = await requireOrgPage(orgSlug);
@@ -42,6 +42,30 @@ export default async function StudentTracker({ params, searchParams }: {
     revalidatePath(path);
     redirect(`${path}?week=${week}&msg=${encodeURIComponent('Saved')}`);
   }
+  /** The whole day in one submit: what was spent, and everyone who came in. */
+  async function logDay(form: FormData) {
+    'use server';
+    const day = String(form.get('day') ?? '');
+    const week = String(form.get('week') ?? day);
+    const fail = (m: string) => redirect(`${path}?week=${week}&err=${encodeURIComponent(m)}`);
+
+    for (const [k, v] of [...form.entries()].filter(([k]) => k.startsWith('spend_'))) {
+      const value = String(v).trim();
+      if (value === '') continue;
+      const r = await saveTrackerValue({ kpiId: k.slice(6), day, value: Number(value), userId: userId! });
+      if (!r.ok) { revalidatePath(path); fail(r.error.message); }
+    }
+    const leads = parseLeadLines(String(form.get('leads') ?? ''));
+    let saved = 0;
+    for (const lead of leads) {
+      const r = await saveLead({ orgSlug, lead: { ...lead, captured_on: day }, userId: userId! });
+      if (!r.ok) { revalidatePath(path); fail(`${r.error.message} (saved ${saved} of ${leads.length} leads)`); }
+      saved++;
+    }
+    revalidatePath(path);
+    redirect(`${path}?week=${week}&msg=${encodeURIComponent(
+      saved ? `Day logged, ${saved} lead${saved === 1 ? '' : 's'} added.` : 'Day logged.')}`);
+  }
   async function addOrEditLead(form: FormData) {
     'use server';
     done(path, await saveLead({ orgSlug, lead: leadFromForm(form), userId: userId! }), 'Lead saved');
@@ -62,11 +86,12 @@ export default async function StudentTracker({ params, searchParams }: {
       title={`${student.data.name} · numbers`}
       sub={ctx.name}
       mine={false}
+      chartKey={sp.chart}
       back={back}
       canEdit={editable}
       canInstall={can(ctx, 'kpis.create')}
       flash={{ msg: sp.msg, err: sp.err }}
-      actions={{ saveValues, saveLead: addOrEditLead, removeLead, install }}
+      actions={{ saveValues, logDay, saveLead: addOrEditLead, removeLead, install }}
     />
   );
 }

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireOrgPage, can } from '@/lib/auth/context';
-import { deleteLead, getTracker, installStudentTracker, saveLead, saveTrackerValue } from '@/modules/tracker/actions';
+import { deleteLead, getTracker, installStudentTracker, parseLeadLines, saveLead, saveTrackerValue } from '@/modules/tracker/actions';
 import { done } from '@/components/flash';
 import { TrackerView, leadFromForm } from '@/components/tracker-view';
 import { Flash, PageHead } from '@/components/ui';
@@ -10,7 +10,7 @@ export const metadata = { title: 'My numbers' };
 
 /** A student's own week. Nothing here needs a kpis.* permission, which is what keeps them a learner. */
 export default async function MyTracker({ params, searchParams }: {
-  params: Promise<{ orgSlug: string }>; searchParams: Promise<{ week?: string; msg?: string; err?: string }>;
+  params: Promise<{ orgSlug: string }>; searchParams: Promise<{ week?: string; chart?: string; msg?: string; err?: string }>;
 }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
   const ctx = await requireOrgPage(orgSlug);
@@ -32,6 +32,30 @@ export default async function MyTracker({ params, searchParams }: {
     revalidatePath(path);
     redirect(`${path}?week=${week}&msg=${encodeURIComponent('Saved')}`);
   }
+  /** The whole day in one submit: what was spent, and everyone who came in. */
+  async function logDay(form: FormData) {
+    'use server';
+    const day = String(form.get('day') ?? '');
+    const week = String(form.get('week') ?? day);
+    const fail = (m: string) => redirect(`${path}?week=${week}&err=${encodeURIComponent(m)}`);
+
+    for (const [k, v] of [...form.entries()].filter(([k]) => k.startsWith('spend_'))) {
+      const value = String(v).trim();
+      if (value === '') continue;
+      const r = await saveTrackerValue({ kpiId: k.slice(6), day, value: Number(value) });
+      if (!r.ok) { revalidatePath(path); fail(r.error.message); }
+    }
+    const leads = parseLeadLines(String(form.get('leads') ?? ''));
+    let saved = 0;
+    for (const lead of leads) {
+      const r = await saveLead({ orgSlug, lead: { ...lead, captured_on: day } });
+      if (!r.ok) { revalidatePath(path); fail(`${r.error.message} (saved ${saved} of ${leads.length} leads)`); }
+      saved++;
+    }
+    revalidatePath(path);
+    redirect(`${path}?week=${week}&msg=${encodeURIComponent(
+      saved ? `Day logged, ${saved} lead${saved === 1 ? '' : 's'} added.` : 'Day logged.')}`);
+  }
   async function addOrEditLead(form: FormData) {
     'use server';
     done(path, await saveLead({ orgSlug, lead: leadFromForm(form) }), 'Lead saved');
@@ -52,10 +76,11 @@ export default async function MyTracker({ params, searchParams }: {
       title="My numbers"
       sub={ctx.name}
       mine
+      chartKey={sp.chart}
       canEdit
       canInstall={can(ctx, 'kpis.create')}
       flash={{ msg: sp.msg, err: sp.err }}
-      actions={{ saveValues, saveLead: addOrEditLead, removeLead, install }}
+      actions={{ saveValues, logDay, saveLead: addOrEditLead, removeLead, install }}
     />
   );
 }
