@@ -4,8 +4,10 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireOrgPage, can } from '@/lib/auth/context';
 import { getEnv } from '@/lib/env';
-import { addCustomer, listStudents, nameStudent, STUDENT_STATUSES } from '@/modules/students/actions';
+import { addCustomer, listStudents, nameStudent, removeStudent, remindOnboarding, STUDENT_STATUSES } from '@/modules/students/actions';
 import { addMemberWithLogin } from '@/modules/memberships/actions';
+import { done } from '@/components/flash';
+import { Menu } from '@/components/menu';
 import { Flash, PageHead, Pill, Stat, day } from '@/components/ui';
 import { Modal } from '@/components/modal';
 
@@ -43,6 +45,8 @@ export default async function Students({ params, searchParams }: {
   })();
   const emailOn = !!getEnv().RESEND_API_KEY;
   const canAddLogin = can(ctx, 'enrollments.create') && can(ctx, 'members.create');
+  const canRemove = can(ctx, 'enrollments.delete');
+  const canRemind = can(ctx, 'enrollments.update');
 
   async function add(form: FormData) {
     'use server';
@@ -78,6 +82,21 @@ export default async function Students({ params, searchParams }: {
     if (!r.data.password) redirect(`${path}?msg=${encodeURIComponent('Added as a student. They already had a login, so their usual password still works.')}`);
     await showOnce(LOGIN_COOKIE, path, JSON.stringify({ email: r.data.email, password: r.data.password }));
     redirect(`${path}?msg=${encodeURIComponent('Added. Their login is below, send it to them however you like.')}`);
+  }
+
+  async function remove(form: FormData) {
+    'use server';
+    // the page knows their display name; the database only has whatever is on their contact record
+    const name = String(form.get('name') ?? '').trim();
+    done(path, await removeStudent({ orgSlug, onboardingId: String(form.get('id')) }),
+      (d) => `${name || d.name} removed${d.lost_access ? '. They can no longer sign in to this workspace.' : ' from students.'}`);
+  }
+  async function remind(form: FormData) {
+    'use server';
+    done(path, await remindOnboarding({ orgSlug, onboardingId: String(form.get('id')) }),
+      (d) => d.emailConfigured
+        ? `Reminder sent to ${d.to}.`
+        : `Reminder queued for ${d.to}. Email is not set up here, so it will go out once it is.`);
   }
 
   const qs = (o: { course?: string; status?: string }) => {
@@ -176,7 +195,7 @@ export default async function Students({ params, searchParams }: {
 
       <div className="card tablewrap">
         <table>
-          <thead><tr><th>Student</th><th>Courses</th><th>Account</th><th>Onboarding</th><th>Added</th><th>Completed</th></tr></thead>
+          <thead><tr><th>Student</th><th>Courses</th><th>Account</th><th>Onboarding</th><th>Added</th><th>Completed</th><th /></tr></thead>
           <tbody>
             {rows.map((s) => (
               <tr key={s.id}>
@@ -189,10 +208,37 @@ export default async function Students({ params, searchParams }: {
                 </td>
                 <td>{day(s.invited_at)}</td>
                 <td>{day(s.completed_at)}</td>
+                <td>
+                  {(canRemind || canRemove) && (
+                    <Menu label={`Manage ${s.name}`}>
+                      {canRemind && !!s.userId && s.unfinished && (
+                        <form action={remind}><input type="hidden" name="id" value={s.id} />
+                          <button className="menu-item" type="submit">Send reminder</button></form>
+                      )}
+                      {canRemove && (<>
+                        {canRemind && !!s.userId && s.unfinished && <hr />}
+                        <Modal small label="Remove student" title={`Remove ${s.name}?`}>
+                          <form action={remove}>
+                            <input type="hidden" name="id" value={s.id} />
+                            <input type="hidden" name="name" value={s.name} />
+                            <p style={{ margin: 0 }}>
+                              They come off this list{s.userId ? ' and can no longer sign in to this workspace' : ''}
+                              {s.courses.length ? ', and their course access is revoked' : ''}.
+                            </p>
+                            <p className="muted" style={{ margin: 0 }}>
+                              Anything they already answered is kept, so this can be undone by a super admin.
+                            </p>
+                            <div><button className="btn primary" type="submit">Remove {s.name}</button></div>
+                          </form>
+                        </Modal>
+                      </>)}
+                    </Menu>
+                  )}
+                </td>
               </tr>
             ))}
             {!rows.length && (
-              <tr><td colSpan={6} className="muted">
+              <tr><td colSpan={7} className="muted">
                 {data.students.length || Object.values(data.counts).some((n) => n > 0)
                   ? 'No students match this filter.'
                   : 'No students yet. Use "Add student", or they appear here automatically when someone buys a course.'}
