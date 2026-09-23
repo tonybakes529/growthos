@@ -190,3 +190,25 @@ details.section > .inner { padding: 14px 16px; display: flex; flex-direction: co
 .assetlinks li a { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
 div.f { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }
 div.f input[type=file] { font-weight: 400; }
+
+/* The "···" menu: management actions sit next to the thing they act on, not in a strip further down. */
+.menu { position: relative; display: inline-flex; }
+.menu-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px;
+            padding: 0 8px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--muted);
+            font: 700 15px inherit; line-height: 1; cursor: pointer; }
+.menu-btn:hover, .menu-btn[aria-expanded="true"] { border-color: var(--line); background: var(--card); color: var(--ink); }
+.menu-list { position: absolute; top: calc(100% + 4px); z-index: 30; min-width: 220px; padding: 6px;
+             display: flex; flex-direction: column; gap: 2px; text-align: left;
+             background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.14); }
+.menu-list.end { right: 0; } .menu-list.start { left: 0; }
+.menu-list form { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+/* every item looks the same whether it is a link, a submit button or the button inside a modal */
+.menu-list .menu-item, .menu-list .btn {
+  display: block; width: 100%; min-height: 34px; padding: 7px 10px; border: 0; border-radius: 6px;
+  background: none; color: var(--ink); font: 600 14px inherit; text-align: left; text-decoration: none; cursor: pointer; }
+.menu-list .menu-item:hover, .menu-list .btn:hover { background: var(--line2); }
+.menu-list .menu-item.danger { color: var(--red); }
+.menu-note { margin: 4px 10px 6px; font-size: 12px; color: var(--muted); white-space: normal; max-width: 240px; }
+.menu-list hr { border: 0; border-top: 1px solid var(--line2); margin: 4px 0; }
+.menu-list label.f { padding: 4px 10px 2px; font-size: 12px; }
+.menu-list input { width: 100%; }

@@ -5,6 +5,7 @@ import { addSopTab, createSop, listSops, listSopTabs, listSopTemplates, removeSo
 import { applyTemplate } from '@/modules/templates/actions';
 import { done } from '@/components/flash';
 import { Flash, PageHead, Pill, day } from '@/components/ui';
+import { Menu, MenuNote } from '@/components/menu';
 import { Modal } from '@/components/modal';
 
 const GENERAL = 'General';
@@ -122,6 +123,23 @@ export default async function Sops({ params, searchParams }: { params: Promise<{
             </Modal>
           </span>
         )}
+        {manageTabs && active && active !== GENERAL && (
+          <span className="tabadd">
+            <Menu label={`Manage the ${active} tab`}>
+              <form action={rename}>
+                <input type="hidden" name="from" value={active} />
+                <label className="f">Rename this tab<input name="to" required maxLength={80} defaultValue={active} /></label>
+                <button className="menu-item" type="submit">Save name</button>
+              </form>
+              <hr />
+              <form action={dropTab}>
+                <input type="hidden" name="name" value={active} />
+                <button className="menu-item danger" type="submit">Remove tab</button>
+              </form>
+              <MenuNote>Removing a tab keeps its SOPs. They move to General.</MenuNote>
+            </Menu>
+          </span>
+        )}
       </nav>
 
       {live.length > 6 && (
@@ -153,20 +171,6 @@ export default async function Sops({ params, searchParams }: { params: Promise<{
           ))}
         </ul>
       </div>
-
-      {manageTabs && active && active !== GENERAL && (
-        <details className="card"><summary style={{ cursor: 'pointer', color: 'var(--muted)' }}>Rename or remove the {active} tab</summary>
-          <div className="row" style={{ marginTop: 10, alignItems: 'end' }}>
-            <form action={rename} className="row" style={{ alignItems: 'end' }}>
-              <input type="hidden" name="from" value={active} />
-              <label className="f">New name<input name="to" required maxLength={80} defaultValue={active} /></label>
-              <button className="btn small" type="submit">Rename</button>
-            </form>
-            <form action={dropTab}><input type="hidden" name="name" value={active} /><button className="btn small" type="submit">Remove tab</button></form>
-            <span className="muted" style={{ fontSize: 12 }}>Removing a tab keeps its SOPs; they move to General.</span>
-          </div>
-        </details>
-      )}
 
       {archived.length > 0 && (
         <details className="card"><summary style={{ cursor: 'pointer', fontWeight: 600 }}>Archived ({archived.length})</summary>

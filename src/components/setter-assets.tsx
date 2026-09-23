@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
+import { Menu } from '@/components/menu';
 import type { ActionResult } from '@/lib/action';
 import type { SetterAsset, SetterAssetFile } from '@/modules/sales/assets';
 import { formatAssetLinks, linkText, parseAssetLinks } from '@/modules/sales/asset-links';
@@ -110,12 +111,27 @@ export function SetterAssets({ assets, base, accept, canCreate, canEdit, canDele
         </div>
       )}
 
-      <AssetDialog asset={openAsset} onClose={() => show(null)}>
+      <AssetDialog
+        asset={openAsset}
+        onClose={() => show(null)}
+        actions={openAsset && !editing && (canEdit || canDelete) ? (
+          <Menu label={`Manage ${openAsset.title}`}>
+            {canEdit && <button type="button" className="menu-item" onClick={() => setEditing(true)}>Edit</button>}
+            {canDelete && (<>
+              {canEdit && <hr />}
+              <form action={remove} onSubmit={(e) => { if (!window.confirm(`Remove "${openAsset.title}" from setter assets?`)) e.preventDefault(); }}>
+                <input type="hidden" name="id" value={openAsset.id} />
+                <button type="submit" className="menu-item danger">Remove</button>
+              </form>
+            </>)}
+          </Menu>
+        ) : null}
+      >
         {openAsset && (editing ? (
           <AssetForm asset={openAsset} categories={categories.filter((c) => c !== OTHER)} accept={accept} save={save} prepareUpload={prepareUpload}
                      err={editOpen ? err : undefined} onCancel={() => setEditing(false)} />
         ) : (
-          <AssetView asset={openAsset} base={base} canEdit={canEdit} canDelete={canDelete} remove={remove} onEdit={() => setEditing(true)} />
+          <AssetView asset={openAsset} base={base} />
         ))}
       </AssetDialog>
     </>
@@ -123,7 +139,9 @@ export function SetterAssets({ assets, base, accept, canCreate, canEdit, canDele
 }
 
 /** Native <dialog>: focus trap, Escape to close, click outside to close. */
-function AssetDialog({ asset, onClose, children }: { asset: SetterAsset | null; onClose: () => void; children: React.ReactNode }) {
+function AssetDialog({ asset, onClose, actions, children }: {
+  asset: SetterAsset | null; onClose: () => void; actions?: React.ReactNode; children: React.ReactNode;
+}) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -136,7 +154,10 @@ function AssetDialog({ asset, onClose, children }: { asset: SetterAsset | null; 
       <div className="modal-body">
         <div className="head" style={{ marginBottom: 4 }}>
           <h2 style={{ margin: 0 }}>{asset?.title}</h2>
-          <button type="button" className="btn small" onClick={() => ref.current?.close()} aria-label="Close">✕</button>
+          <span className="row">
+            {actions}
+            <button type="button" className="btn small" onClick={() => ref.current?.close()} aria-label="Close">✕</button>
+          </span>
         </div>
         {children}
       </div>
@@ -144,9 +165,7 @@ function AssetDialog({ asset, onClose, children }: { asset: SetterAsset | null; 
   );
 }
 
-function AssetView({ asset, base, canEdit, canDelete, remove, onEdit }: {
-  asset: SetterAsset; base: string; canEdit: boolean; canDelete: boolean; remove: FormAction; onEdit: () => void;
-}) {
+function AssetView({ asset, base }: { asset: SetterAsset; base: string }) {
   const f = asset.file;
   const fileHref = `${base}/${asset.id}/file`;
   return (
@@ -186,17 +205,7 @@ function AssetView({ asset, base, canEdit, canDelete, remove, onEdit }: {
 
       {!f && !asset.links.length && <p className="muted" style={{ margin: 0 }}>Nothing attached yet.</p>}
 
-      {(canEdit || canDelete) && (
-        <div className="row" style={{ marginTop: 6 }}>
-          {canEdit && <button type="button" className="btn small" onClick={onEdit}>Edit</button>}
-          {canDelete && (
-            <form action={remove} onSubmit={(e) => { if (!window.confirm(`Remove "${asset.title}" from setter assets?`)) e.preventDefault(); }}>
-              <input type="hidden" name="id" value={asset.id} />
-              <button type="submit" className="btn small">Remove</button>
-            </form>
-          )}
-        </div>
-      )}
+
     </>
   );
 }
