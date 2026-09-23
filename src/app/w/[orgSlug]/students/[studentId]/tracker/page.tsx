@@ -2,9 +2,9 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireOrgPage, can } from '@/lib/auth/context';
 import { getStudent } from '@/modules/students/actions';
-import { deleteLead, getTracker, installStudentTracker, parseLeadLines, saveLead, saveTrackerValue } from '@/modules/tracker/actions';
+import { deleteLead, getTracker, installStudentTracker, saveLead, saveTrackerValue } from '@/modules/tracker/actions';
 import { done } from '@/components/flash';
-import { TrackerView, leadFromForm } from '@/components/tracker-view';
+import { TrackerView, leadFromForm, leadsFromDayForm } from '@/components/tracker-view';
 import { Flash, PageHead } from '@/components/ui';
 
 /** The same week, seen by a coach or client admin. Editing needs kpis.update; reading needs kpis.read. */
@@ -55,7 +55,7 @@ export default async function StudentTracker({ params, searchParams }: {
       const r = await saveTrackerValue({ kpiId: k.slice(6), day, value: Number(value), userId: userId! });
       if (!r.ok) { revalidatePath(path); fail(r.error.message); }
     }
-    const leads = parseLeadLines(String(form.get('leads') ?? ''));
+    const leads = leadsFromDayForm(form);
     let saved = 0;
     for (const lead of leads) {
       const r = await saveLead({ orgSlug, lead: { ...lead, captured_on: day }, userId: userId! });

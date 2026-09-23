@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireOrgPage, can } from '@/lib/auth/context';
-import { deleteLead, getTracker, installStudentTracker, parseLeadLines, saveLead, saveTrackerValue } from '@/modules/tracker/actions';
+import { deleteLead, getTracker, installStudentTracker, saveLead, saveTrackerValue } from '@/modules/tracker/actions';
 import { done } from '@/components/flash';
-import { TrackerView, leadFromForm } from '@/components/tracker-view';
+import { TrackerView, leadFromForm, leadsFromDayForm } from '@/components/tracker-view';
 import { Flash, PageHead } from '@/components/ui';
 
 export const metadata = { title: 'My numbers' };
@@ -45,7 +45,7 @@ export default async function MyTracker({ params, searchParams }: {
       const r = await saveTrackerValue({ kpiId: k.slice(6), day, value: Number(value) });
       if (!r.ok) { revalidatePath(path); fail(r.error.message); }
     }
-    const leads = parseLeadLines(String(form.get('leads') ?? ''));
+    const leads = leadsFromDayForm(form);
     let saved = 0;
     for (const lead of leads) {
       const r = await saveLead({ orgSlug, lead: { ...lead, captured_on: day } });

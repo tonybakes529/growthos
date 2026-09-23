@@ -22,6 +22,9 @@ const HOW: Record<string, string> = {
   automated: 'synced',
 };
 
+/** How many blank lead rows the day form offers. Blank rows are ignored on save. */
+const LEAD_ROWS = 6;
+
 function LeadFields({ lead, objections }: { lead?: TrackerLead; objections: Tracker['objections'] }) {
   const flags = [
     ['answered', 'Answered'], ['qualified', 'Qualified'], ['booked', 'Booked'],
@@ -55,7 +58,6 @@ function LeadFields({ lead, objections }: { lead?: TrackerLead; objections: Trac
     </>
   );
 }
-
 
 /** A plain SVG bar chart of one metric across the week. No library, no client JavaScript. */
 function WeekChart({ data, metric }: { data: Tracker; metric: TrackerRow }) {
@@ -95,6 +97,9 @@ function WeekChart({ data, metric }: { data: Tracker; metric: TrackerRow }) {
 /**
  * One student's week. The same view whether they are looking at their own or a coach is looking at theirs,
  * so there is only one thing to keep right. Server actions arrive already bound to the right student.
+ *
+ * The tracker sits at the top, because that is what people come to look at. Entering the day is a dialog,
+ * reachable from the header and again at the foot of the page, because it happens once and then you are done.
  */
 export function TrackerView({ data, path, title, sub, back, mine, chartKey, canEdit, canInstall, flash, actions }: {
   data: Tracker;
@@ -122,6 +127,7 @@ export function TrackerView({ data, path, title, sub, back, mine, chartKey, canE
   const totalObjections = data.objections.reduce((n, o) => n + Number(o.count), 0);
   const chartRow = data.week.find((r) => r.key === chartKey)
     ?? data.week.find((r) => r.key === 'tracker_new_leads') ?? data.week[0] ?? null;
+  const inWeek = data.today >= data.week_start && data.today <= data.week_end;
 
   if (!data.scorecard) {
     return (
@@ -145,12 +151,61 @@ export function TrackerView({ data, path, title, sub, back, mine, chartKey, canE
     );
   }
 
+  // One dialog, offered twice: in the header for someone who came to enter today, and at the foot for
+  // someone who read their numbers first and is now ready to.
+  const dayForm = (
+    <form action={actions.logDay} key={`${data.today}-${data.leads.length}`}>
+      <input type="hidden" name="week" value={week} />
+      <p className="muted" style={{ margin: 0 }}>
+        Fill this in once at the end of the day. Leave anything you do not have blank.
+      </p>
+
+      <label className="f">Which day?
+        <input name="day" type="date" defaultValue={inWeek ? data.today : data.week_start}
+               min={data.week_start} max={data.week_end} required />
+      </label>
+
+      {manual.map((r) => (
+        <label className="f" key={r.kpi_id}>
+          {r.name === 'Ad Spend' ? 'How much did you spend on ads that day?' : r.name}
+          <input name={`spend_${r.kpi_id}`} type="number" step="any" min="0" placeholder="0"
+                 aria-label={`${r.name} for that day`} />
+        </label>
+      ))}
+
+      <div>
+        <b>Who came in that day?</b>
+        <p className="muted" style={{ margin: '2px 0 8px' }}>
+          One person per row. A name or an email is enough, and empty rows are ignored.
+        </p>
+        <div className="tablewrap">
+          <table>
+            <thead><tr><th style={{ width: 26 }} /><th>Name</th><th>Email</th><th>Phone</th></tr></thead>
+            <tbody>
+              {Array.from({ length: LEAD_ROWS }, (_, i) => (
+                <tr key={i}>
+                  <td className="muted">{i + 1}</td>
+                  <td><input name={`lead_${i}_name`} maxLength={200} aria-label={`Name of lead ${i + 1}`} /></td>
+                  <td><input name={`lead_${i}_email`} type="email" maxLength={320} aria-label={`Email of lead ${i + 1}`} /></td>
+                  <td><input name={`lead_${i}_phone`} maxLength={50} aria-label={`Phone of lead ${i + 1}`} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div><button className="btn primary" type="submit">Save the day</button></div>
+    </form>
+  );
+
   return (
     <>
       {back && <Link href={back.href}>← {back.label}</Link>}
       <PageHead sub={sub} title={title}>
         <a className="btn" href={`${path}?week=${shift(week, -7)}`}>← Previous week</a>
         <a className="btn" href={`${path}?week=${shift(week, 7)}`}>Next week →</a>
+        {canEdit && <Modal label="Log the day" title="Log the day" primary>{dayForm}</Modal>}
       </PageHead>
       <Flash msg={flash.msg} err={flash.err} />
       <p className="muted" style={{ margin: 0 }}>
@@ -158,47 +213,6 @@ export function TrackerView({ data, path, title, sub, back, mine, chartKey, canE
         {mine ? 'Log the day once and these numbers look after themselves.'
               : 'Everything except Ad Spend is counted from the leads below.'}
       </p>
-
-      {canEdit && (
-        <form action={actions.logDay} className="card next" key={`${data.today}-${data.leads.length}`}>
-          <h2 style={{ marginTop: 0 }}>Log the day</h2>
-          <p className="muted" style={{ marginTop: 0 }}>
-            One go, at the end of the day: what you spent, and who came in. Everything else works itself out.
-          </p>
-          <div className="row" style={{ alignItems: 'end' }}>
-            <label className="f">Day<input name="day" type="date" defaultValue={data.today}
-                                           min={data.week_start} max={data.week_end} required /></label>
-            {manual.map((r) => (
-              <label className="f" key={r.kpi_id}>
-                {r.name}
-                <input name={`spend_${r.kpi_id}`} type="number" step="any" style={{ width: 130 }}
-                       placeholder="0" aria-label={`${r.name} for that day`} />
-              </label>
-            ))}
-          </div>
-          <label className="f">Leads that came in <span className="muted" style={{ fontWeight: 400 }}>(one per line)</span>
-            <textarea name="leads" rows={5} placeholder={'Dana Example, dana@example.com, 07700 900123\nsam@example.com\nPat Riley, pat@example.com'} />
-            <span className="qhelp">Name, email and phone in any order. An email on its own is fine. Mark who booked and converted in the table below as it happens.</span>
-          </label>
-          <div><button className="btn primary" type="submit">Log the day</button></div>
-        </form>
-      )}
-
-      {!!chartRow && (
-        <div className="card">
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <h2 style={{ margin: 0 }}>{chartRow.name} this week</h2>
-            <form action={path} className="row">
-              <input type="hidden" name="week" value={week} />
-              <select name="chart" defaultValue={chartRow.key} aria-label="Metric to graph">
-                {data.week.map((r) => <option key={r.kpi_id} value={r.key}>{r.name}</option>)}
-              </select>
-              <button className="btn small" type="submit">Show</button>
-            </form>
-          </div>
-          <WeekChart data={data} metric={chartRow} />
-        </div>
-      )}
 
       <form action={actions.saveValues} className="card">
         <input type="hidden" name="week" value={week} />
@@ -242,11 +256,27 @@ export function TrackerView({ data, path, title, sub, back, mine, chartKey, canE
           <div style={{ marginTop: 10 }}>
             <button className="btn primary" type="submit">Save</button>
             <span className="muted" style={{ marginLeft: 10, fontSize: 13 }}>
-              Only the typed rows need saving. Everything else follows the leads below.
+              Corrects a typed figure straight in the table. Everything else follows the leads.
             </span>
           </div>
         )}
       </form>
+
+      {!!chartRow && (
+        <div className="card">
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <h2 style={{ margin: 0 }}>{chartRow.name} this week</h2>
+            <form action={path} className="row">
+              <input type="hidden" name="week" value={week} />
+              <select name="chart" defaultValue={chartRow.key} aria-label="Metric to graph">
+                {data.week.map((r) => <option key={r.kpi_id} value={r.key}>{r.name}</option>)}
+              </select>
+              <button className="btn small" type="submit">Show</button>
+            </form>
+          </div>
+          <WeekChart data={data} metric={chartRow} />
+        </div>
+      )}
 
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Why they said no <span className="muted" style={{ fontWeight: 400 }}>· this week</span></h2>
@@ -260,18 +290,8 @@ export function TrackerView({ data, path, title, sub, back, mine, chartKey, canE
       </div>
 
       <div className="card">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0 }}>Leads this week ({data.leads.length})</h2>
-          {canEdit && (
-            <Modal label="+ One more lead" title="Add a lead" small>
-              <form action={actions.saveLead}>
-                <LeadFields objections={data.objections} />
-                <div><button className="btn primary" type="submit">Add lead</button></div>
-              </form>
-            </Modal>
-          )}
-        </div>
-        {!data.leads.length && <p className="empty">Nothing logged this week yet. Use &ldquo;Log the day&rdquo; above.</p>}
+        <h2 style={{ marginTop: 0 }}>Leads this week ({data.leads.length})</h2>
+        {!data.leads.length && <p className="empty">Nothing logged this week yet. Use &ldquo;Log the day&rdquo;.</p>}
         <div className="tablewrap">
           {!!data.leads.length && (
             <table>
@@ -319,10 +339,20 @@ export function TrackerView({ data, path, title, sub, back, mine, chartKey, canE
         </div>
         {!!data.leads.length && (
           <p className="muted" style={{ marginBottom: 0 }}>
-            Notes are on each lead: open the menu and choose Edit.
+            Mark who booked, showed up and signed with the menu on each row as it happens.
           </p>
         )}
       </div>
+
+      {canEdit && (
+        <div className="card next">
+          <h2 style={{ marginTop: 0 }}>End of the day</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            One form: what you spent, and everyone who came in. It fills the tracker at the top of this page.
+          </p>
+          <Modal label="Log the day" title="Log the day" primary>{dayForm}</Modal>
+        </div>
+      )}
     </>
   );
 }
@@ -346,4 +376,15 @@ export function leadFromForm(form: FormData) {
     follow_up_attempts: num('follow_up_attempts'),
     notes: str('notes'),
   };
+}
+
+/** The day dialog's numbered rows, ignoring any the student left blank. */
+export function leadsFromDayForm(form: FormData) {
+  const out: { name?: string; email?: string; phone?: string }[] = [];
+  for (let i = 0; i < LEAD_ROWS; i++) {
+    const pick = (f: string) => String(form.get(`lead_${i}_${f}`) ?? '').trim() || undefined;
+    const lead = { name: pick('name'), email: pick('email'), phone: pick('phone') };
+    if (lead.name || lead.email || lead.phone) out.push(lead);
+  }
+  return out;
 }

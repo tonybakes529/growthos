@@ -95,27 +95,6 @@ export const installStudentTracker = action(z.object({ orgSlug: zSlug }), async 
 });
 
 
-/**
- * One line per lead, as they would paste it out of a CRM or type at the end of the day:
- *   Dana Example, dana@example.com, 07700 900123
- * Order does not matter. Anything with an @ is the email, anything that is mostly digits is the phone,
- * and whatever is left is the name. A bare email on its own is a valid line.
- */
-export function parseLeadLines(text: string): { name?: string; email?: string; phone?: string }[] {
-  return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-    const parts = line.split(/[,\t;]+/).map((p) => p.trim()).filter(Boolean);
-    const lead: { name?: string; email?: string; phone?: string } = {};
-    for (const part of parts) {
-      if (!lead.email && part.includes('@')) lead.email = part;
-      else if (!lead.phone && /^[+()\d][\d\s()+-]{5,}$/.test(part)) lead.phone = part;
-      else if (!lead.name) lead.name = part;
-    }
-    // a line that is only an email still deserves a row
-    if (!lead.name && !lead.email && !lead.phone) lead.name = line.slice(0, 200);
-    return lead;
-  });
-}
-
 /** How a tracker row reads: 1,234 / $1,234 / 40% / 2.5x. Long decimal tails come back from numeric maths. */
 export function formatKpi(value: number | null, unit: string): string {
   if (value === null || value === undefined) return '—';
