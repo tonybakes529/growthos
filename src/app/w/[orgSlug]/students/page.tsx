@@ -47,6 +47,7 @@ export default async function Students({ params, searchParams }: {
   const canAddLogin = can(ctx, 'enrollments.create') && can(ctx, 'members.create');
   const canRemove = can(ctx, 'enrollments.delete');
   const canRemind = can(ctx, 'enrollments.update');
+  const canTracker = can(ctx, 'kpis.read');
 
   async function add(form: FormData) {
     'use server';
@@ -209,8 +210,11 @@ export default async function Students({ params, searchParams }: {
                 <td>{day(s.invited_at)}</td>
                 <td>{day(s.completed_at)}</td>
                 <td>
-                  {(canRemind || canRemove) && (
+                  {(canRemind || canRemove || canTracker) && (
                     <Menu label={`Manage ${s.name}`}>
+                      {canTracker && !!s.userId && (
+                        <Link className="menu-item" href={`${path}/${s.id}/tracker`}>Open their tracker</Link>
+                      )}
                       {canRemind && !!s.userId && s.unfinished && (
                         <form action={remind}><input type="hidden" name="id" value={s.id} />
                           <button className="menu-item" type="submit">Send reminder</button></form>
