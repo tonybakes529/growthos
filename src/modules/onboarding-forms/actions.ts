@@ -33,20 +33,41 @@ function keyFrom(label: string, taken: Set<string>): string {
 export const listForms = action(z.object({ orgSlug: zSlug }), async ({ orgSlug }) => {
   const ctx = await requireOrg(orgSlug);
   assertCan(ctx, 'programs.read');
-  const [forms, questions, programs] = await Promise.all([
+  const [forms, questions, programs, org] = await Promise.all([
     ctx.sb.from('onboarding_forms').select('id, name, description, status, published_at, updated_at')
       .eq('organization_id', ctx.organizationId).is('deleted_at', null).order('created_at'),
     ctx.sb.from('onboarding_form_questions').select('form_id').eq('organization_id', ctx.organizationId).is('deleted_at', null),
     ctx.sb.from('programs').select('id, title, onboarding_form_id').eq('organization_id', ctx.organizationId)
       .is('deleted_at', null).not('onboarding_form_id', 'is', null),
+    ctx.sb.from('organizations').select('default_onboarding_form_id').eq('id', ctx.organizationId).single(),
   ]);
   const qs = unwrap(questions), ps = unwrap(programs);
-  return unwrap(forms).map((f) => ({
-    ...f,
-    questionCount: qs.filter((q) => q.form_id === f.id).length,
-    courses: ps.filter((p) => p.onboarding_form_id === f.id).map((p) => ({ id: p.id, title: p.title })),
-  }));
+  const intakeFormId = unwrap(org).default_onboarding_form_id;
+  return {
+    intakeFormId,
+    forms: unwrap(forms).map((f) => ({
+      ...f,
+      questionCount: qs.filter((q) => q.form_id === f.id).length,
+      isIntake: f.id === intakeFormId,
+      courses: ps.filter((p) => p.onboarding_form_id === f.id).map((p) => ({ id: p.id, title: p.title })),
+    })),
+  };
 });
+
+/**
+ * The form every new student fills in, whether or not they bought a course. A course can still override it
+ * with one of its own. Passing null turns the workspace intake off.
+ */
+export const setWorkspaceIntakeForm = action(
+  z.object({ orgSlug: zSlug, formId: zId.nullable() }),
+  async ({ orgSlug, formId }) => {
+    const ctx = await requireOrg(orgSlug);
+    assertCan(ctx, 'organization.update');
+    unwrap(await ctx.sb.from('organizations').update({ default_onboarding_form_id: formId })
+      .eq('id', ctx.organizationId).select('id').single());
+    return null;
+  },
+);
 
 export const getForm = action(z.object({ orgSlug: zSlug, formId: zId }), async ({ orgSlug, formId }) => {
   const ctx = await requireOrg(orgSlug);
@@ -107,9 +128,15 @@ export const setFormStatus = action(
         .eq('form_id', formId).eq('organization_id', ctx.organizationId).is('deleted_at', null);
       if (!count) throw new AppError('validation', 'Add at least one question before publishing');
     } else {
-      const { count } = await ctx.sb.from('programs').select('id', { count: 'exact', head: true })
-        .eq('onboarding_form_id', formId).eq('organization_id', ctx.organizationId).is('deleted_at', null);
-      if (count) throw new AppError('validation', 'A course is using this form. Detach it from the course first, or new customers would have nothing to fill in.');
+      const [programs, org] = await Promise.all([
+        ctx.sb.from('programs').select('id', { count: 'exact', head: true })
+          .eq('onboarding_form_id', formId).eq('organization_id', ctx.organizationId).is('deleted_at', null),
+        ctx.sb.from('organizations').select('default_onboarding_form_id').eq('id', ctx.organizationId).single(),
+      ]);
+      if (programs.count) throw new AppError('validation', 'A course is using this form. Detach it from the course first, or new students would have nothing to fill in.');
+      if (unwrap(org).default_onboarding_form_id === formId) {
+        throw new AppError('validation', 'This is your workspace intake form. Pick a different one first, or turn the intake form off, or new students would have nothing to fill in.');
+      }
     }
     unwrap(await ctx.sb.from('onboarding_forms')
       .update({ status, published_at: status === 'published' ? new Date().toISOString() : undefined })

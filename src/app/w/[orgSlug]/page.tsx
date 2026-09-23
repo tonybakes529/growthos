@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requireOrgPage, can, isLearner, type OrgContext } from '@/lib/auth/context';
 import { getQuestionnaire, submitQuestionnaire } from '@/modules/onboarding/actions';
-import { getPendingOnboarding } from '@/modules/customers/actions';
+import { getPendingOnboarding } from '@/modules/students/actions';
 import { listMyEnrollments } from '@/modules/enrollments/actions';
 import { getMyOutlines, type Outline } from '@/modules/programs/actions';
 import { listTasks, setTaskStatus } from '@/modules/tasks/actions';
@@ -179,8 +179,8 @@ async function TeamHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?
   const overdueCount = overdue.count ?? 0;
   const counts = (countRes?.data ?? {}) as Record<string, number | null>;
   const n = (k: string, allowed: boolean) => (allowed ? Number(counts[k] ?? 0) : 0);
-  const customerCount = n('customers', seeCustomers), onboarded = n('completed', seeCustomers);
-  // "Not finished onboarding" only counts customers whose course actually has a form to fill in.
+  const studentCount = n('customers', seeCustomers), onboarded = n('completed', seeCustomers);
+  // "Not finished onboarding" only counts students who actually have a form to fill in.
   const unfinished = n('unfinished_with_form', seeCustomers);
   const invited = n('invited', seeCustomers);
   const card = scorecards?.data?.[0] ?? null;
@@ -200,8 +200,8 @@ async function TeamHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?
   const attention: { text: string; href: string; tone: string }[] = [];
   if (overdueCount) attention.push({ text: `${overdueCount} overdue task${overdueCount === 1 ? '' : 's'}`, href: `${path}/tasks?view=overdue`, tone: 'overdue' });
   if (scorecardDue) attention.push({ text: `Weekly scorecard for week of ${day(week)} not submitted`, href: `${path}/scorecard?week=${week}`, tone: 'at_risk' });
-  if (unfinished) attention.push({ text: `${unfinished} customer${unfinished === 1 ? ' has' : 's have'} not finished onboarding`, href: `${path}/customers?status=in_progress`, tone: 'at_risk' });
-  if (invited) attention.push({ text: `${invited} invited customer${invited === 1 ? '' : 's'} not signed up yet`, href: `${path}/customers?status=invited`, tone: 'none' });
+  if (unfinished) attention.push({ text: `${unfinished} student${unfinished === 1 ? ' has' : 's have'} not finished onboarding`, href: `${path}/students?status=in_progress`, tone: 'at_risk' });
+  if (invited) attention.push({ text: `${invited} invited student${invited === 1 ? '' : 's'} not signed up yet`, href: `${path}/students?status=invited`, tone: 'none' });
   if (offTrack) attention.push({ text: `${offTrack} KPI${offTrack === 1 ? '' : 's'} off track`, href: `${path}/scorecard`, tone: 'off_track' });
   if (blockers.data?.length) attention.push({ text: `${blockers.data.length} open blocker${blockers.data.length === 1 ? '' : 's'}`, href: `${path}/tasks`, tone: 'at_risk' });
 
@@ -219,7 +219,7 @@ async function TeamHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?
   return (
     <>
       <PageHead sub={ctx.name} title="Home">
-        {seeCustomers && can(ctx, 'enrollments.create') && <Link className="btn" href={`${path}/customers?add=1`}>Add customer</Link>}
+        {seeCustomers && can(ctx, 'enrollments.create') && <Link className="btn" href={`${path}/students?add=1`}>Add student</Link>}
         {scorecardDue && can(ctx, 'kpis.create') && <Link className="btn primary" href={`${path}/scorecard?week=${week}`}>Submit scorecard</Link>}
       </PageHead>
       <Flash msg={sp.msg} err={sp.err} />
@@ -269,8 +269,8 @@ async function TeamHome({ ctx, sp }: { ctx: OrgContext; sp: { msg?: string; err?
 
       <div className="grid g4">
         {seeCustomers && (
-          <Link href={`${path}/customers`} style={{ textDecoration: 'none', color: 'inherit' }}>
-            <Stat k="Customers" v={customerCount} s={customerCount ? `${onboarded} onboarded · ${unfinished + invited} in progress` : 'None yet'} />
+          <Link href={`${path}/students`} style={{ textDecoration: 'none', color: 'inherit' }}>
+            <Stat k="Students" v={studentCount} s={studentCount ? `${onboarded} onboarded · ${unfinished + invited} in progress` : 'None yet'} />
           </Link>
         )}
         <Link href={`${path}/programs`} style={{ textDecoration: 'none', color: 'inherit' }}>

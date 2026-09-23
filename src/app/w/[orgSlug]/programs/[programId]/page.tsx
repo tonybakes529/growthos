@@ -148,7 +148,12 @@ export default async function ProgramPage({ params, searchParams }: { params: Pr
               <h2>Students ({report.data.students.length})</h2>
               <ul className="plain">
                 {report.data.students.map((s) => (
-                  <li key={s.id}><span>{s.profile?.display_name ?? 'Student'}</span><span>{Math.round(Number(s.progress_percent))}%</span></li>
+                  <li key={s.id}>
+                    <span>{s.onboardingId
+                      ? <Link href={`/w/${orgSlug}/students/${s.onboardingId}`}>{s.profile?.display_name ?? 'Student'}</Link>
+                      : (s.profile?.display_name ?? 'Student')}</span>
+                    <span>{Math.round(Number(s.progress_percent))}%</span>
+                  </li>
                 ))}
               </ul>
               {!!enrollable.length && (
@@ -164,13 +169,13 @@ export default async function ProgramPage({ params, searchParams }: { params: Pr
 
           {seeCustomers && (
             <div className="card">
-              <h2>Customers ({customerTotal})</h2>
+              <h2>Students ({customerTotal})</h2>
               <ul className="plain">
                 <li><span className="muted">Invited, no login yet</span><span>{customersInvited}</span></li>
                 <li><span className="muted">Onboarding not finished</span><span>{customersUnfinished}</span></li>
                 <li><span className="muted">Onboarding complete</span><span>{customersDone}</span></li>
               </ul>
-              <p style={{ marginBottom: 0 }}><Link href={`/w/${orgSlug}/customers?course=${programId}`}>View customers</Link></p>
+              <p style={{ marginBottom: 0 }}><Link href={`/w/${orgSlug}/students?course=${programId}`}>View students</Link></p>
             </div>
           )}
 
@@ -185,7 +190,7 @@ export default async function ProgramPage({ params, searchParams }: { params: Pr
                   {(forms?.data ?? []).filter((f) => f.status === 'published' || f.id === program.onboarding_form_id)
                     .map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
-                <span className="qhelp">New customers of this course fill this in right after creating their login. Only published forms are listed. <Link href={`/w/${orgSlug}/onboarding`}>Manage forms</Link></span>
+                <span className="qhelp">Overrides your workspace intake form for buyers of this course. Only published forms are listed. <Link href={`/w/${orgSlug}/onboarding`}>Manage forms</Link></span>
               </label>
               <label className="f">Product ID <span className="muted" style={{ fontWeight: 400 }}>(optional)</span>
                 <input name="product" maxLength={200} defaultValue={program.external_product_id ?? ''} placeholder="The ID your checkout uses for this course" /></label>

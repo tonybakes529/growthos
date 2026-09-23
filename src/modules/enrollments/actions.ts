@@ -73,7 +73,7 @@ export const listMyEnrollments = action(z.object({ orgSlug: zSlug }), async ({ o
 export const getProgressReport = action(z.object({ orgSlug: zSlug, programId: zId }), async ({ orgSlug, programId }) => {
   const ctx = await requireOrg(orgSlug);
   assertCan(ctx, 'enrollments.read');
-  const [summary, rows] = await Promise.all([
+  const [summary, rows, onboardings] = await Promise.all([
     ctx.sb.from('program_completion_v').select('*').eq('program_id', programId).maybeSingle(),
     // each student's profile rides along (this used to be a second round)
     ctx.sb.from('program_enrollments')
@@ -82,8 +82,19 @@ export const getProgressReport = action(z.object({ orgSlug: zSlug, programId: zI
       .overrideTypes<{ id: string; user_id: string; status: string; progress_percent: number; lessons_completed: number; lessons_total: number;
         enrolled_at: string; completed_at: string | null; last_activity_at: string | null;
         user: { profile: { user_id: string; display_name: string | null; avatar_url: string | null } | null } | null }[], { merge: false }>(),
+    // so the panel can link each name to their record and their onboarding answers
+    ctx.sb.from('customer_onboardings').select('id, user_id, program_id')
+      .eq('organization_id', ctx.organizationId).not('user_id', 'is', null)
+      .or(`program_id.is.null,program_id.eq.${programId}`),
   ]);
-  const students = unwrap(rows).map(({ user, ...s }) => ({ ...s, profile: user?.profile ?? null }));
+  const obs = unwrap(onboardings);
+  const students = unwrap(rows).map(({ user, ...s }) => ({
+    ...s,
+    profile: user?.profile ?? null,
+    // the workspace intake is the person's own record, so it wins over the course one
+    onboardingId: (obs.find((o) => o.user_id === s.user_id && o.program_id === null)
+      ?? obs.find((o) => o.user_id === s.user_id))?.id ?? null,
+  }));
   const stalled = students.filter((s) => s.status === 'active' && (!s.last_activity_at || Date.now() - Date.parse(s.last_activity_at) > 14 * 864e5));
   return {
     summary: unwrap(summary),
