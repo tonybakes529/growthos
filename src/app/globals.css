@@ -212,3 +212,10 @@ div.f input[type=file] { font-weight: 400; }
 .menu-list hr { border: 0; border-top: 1px solid var(--line2); margin: 4px 0; }
 .menu-list label.f { padding: 4px 10px 2px; font-size: 12px; }
 .menu-list input { width: 100%; }
+
+/* The daily tracker grid: a week of columns, today picked out, the week total pinned to the right. */
+table.tracker th, table.tracker td { text-align: right; }
+table.tracker th:first-child, table.tracker td:first-child { text-align: left; white-space: normal; min-width: 190px; }
+table.tracker th.today, table.tracker td.today { background: var(--accent-bg); }
+table.tracker th.total, table.tracker td.total { background: var(--line2); border-left: 2px solid var(--line); }
+table.tracker input { text-align: right; }

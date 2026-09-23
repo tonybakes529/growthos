@@ -30,6 +30,8 @@ const MANAGE: Def[] = [
 const LEARNER: Def[] = [
   { path: '', label: 'Home' },
   { path: '/programs', label: 'My Courses', also: ['/lessons'] },
+  // no permission gate: a student holds none, and giving them one would stop them being a learner
+  { path: '/tracker', label: 'My Numbers' },
   { path: '/tasks', label: 'My Tasks' },
 ];
 
