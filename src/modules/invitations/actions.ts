@@ -30,8 +30,8 @@ export const inviteMember = action(
       }),
     ) as { invitation_id: string; token: string };
     // the person is waiting on this one, so it goes out now rather than on the nightly drain
-    await sendQueuedNow(i.email);
-    return { invitationId: res.invitation_id, inviteUrl: `${getEnv().NEXT_PUBLIC_APP_URL}/invite/${res.token}` };
+    const emailed = await sendQueuedNow(i.email);
+    return { invitationId: res.invitation_id, emailed, inviteUrl: `${getEnv().NEXT_PUBLIC_APP_URL}/invite/${res.token}` };
   },
 );
 

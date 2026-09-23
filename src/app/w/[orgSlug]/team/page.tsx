@@ -42,8 +42,11 @@ export default async function Team({ params, searchParams }: { params: Promise<{
 
   async function invite(form: FormData) {
     'use server';
-    done(path, await inviteMember({ orgSlug, email: String(form.get('email')), roleKey: String(form.get('role')) }),
-      (d) => `Invitation created. Send them this link: ${d.inviteUrl}`);
+    const email = String(form.get('email'));
+    done(path, await inviteMember({ orgSlug, email, roleKey: String(form.get('role')) }),
+      (d) => d.emailed
+        ? `Invitation emailed to ${email}. If it does not arrive, send them this link: ${d.inviteUrl}`
+        : `Invitation created. Email is not set up here, so send them this link: ${d.inviteUrl}`);
   }
   async function addPerson(form: FormData) {
     'use server';

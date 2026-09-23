@@ -18,6 +18,10 @@ export default async function Invite({ params, searchParams }: { params: Promise
   }
 
   const here = `/invite/${token}`;
+  // The invitation belongs to one address. Someone already signed in as somebody else (an admin checking the
+  // link, or a second account) would otherwise press Accept and be turned away with a confusing message.
+  const signedInAs = session?.email ?? null;
+  const wrongAccount = !!signedInAs && !!inv && signedInAs.toLowerCase() !== inv.email.toLowerCase();
   return (
     <main className="center">
       <div className="card">
@@ -28,7 +32,18 @@ export default async function Invite({ params, searchParams }: { params: Promise
               <h1>Join {inv.organization_name}</h1>
               <p>You were invited as <b>{inv.role_name}</b> ({inv.email}).</p>
               <Flash err={err} />
-              {session ? (
+              {wrongAccount ? (
+                <>
+                  <p className="muted">
+                    You are signed in as <b>{signedInAs}</b>, and this invitation is for <b>{inv.email}</b>.
+                    Sign out to accept it, or open the link in a private window.
+                  </p>
+                  <form method="post" action="/logout" style={{ marginTop: 12 }}>
+                    <input type="hidden" name="next" value={here} />
+                    <button className="btn primary" type="submit">Sign out and continue</button>
+                  </form>
+                </>
+              ) : session ? (
                 <form action={accept} style={{ marginTop: 12 }}><button className="btn primary" type="submit">Accept invitation</button></form>
               ) : (
                 <div className="row">
