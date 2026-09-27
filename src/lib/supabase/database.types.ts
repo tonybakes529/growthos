@@ -928,6 +928,48 @@ export type Database = {
         Update: { id?: string; organization_id?: string; name?: string; url?: string; event_types?: string[]; secret_ref?: string | null; is_active?: boolean; last_delivery_at?: string | null; failure_count?: number; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
         Relationships: [];
       };
+      zapier_connections: {
+        Row: { id: string; organization_id: string; status: string; account_label: string | null; account_id: string | null; scopes: string[]; expires_at: string | null; connected_at: string | null; connected_by: string | null; last_checked_at: string | null; last_error: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null };
+        Insert: { id?: string; organization_id: string; status?: string; account_label?: string | null; account_id?: string | null; scopes?: string[]; expires_at?: string | null; connected_at?: string | null; connected_by?: string | null; last_checked_at?: string | null; last_error?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Update: { id?: string; organization_id?: string; status?: string; account_label?: string | null; account_id?: string | null; scopes?: string[]; expires_at?: string | null; connected_at?: string | null; connected_by?: string | null; last_checked_at?: string | null; last_error?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Relationships: [];
+      };
+      zapier_connection_secrets: {
+        Row: { organization_id: string; connection_id: string; access_token: Json; refresh_token: Json | null; rotated_at: string };
+        Insert: { organization_id: string; connection_id: string; access_token: Json; refresh_token?: Json | null; rotated_at?: string };
+        Update: { organization_id?: string; connection_id?: string; access_token?: Json; refresh_token?: Json | null; rotated_at?: string };
+        Relationships: [];
+      };
+      zapier_oauth_states: {
+        Row: { state: string; organization_id: string; created_by: string; redirect_path: string; created_at: string; expires_at: string; used_at: string | null };
+        Insert: { state: string; organization_id: string; created_by: string; redirect_path: string; created_at?: string; expires_at?: string; used_at?: string | null };
+        Update: { state?: string; organization_id?: string; created_by?: string; redirect_path?: string; created_at?: string; expires_at?: string; used_at?: string | null };
+        Relationships: [];
+      };
+      zapier_api_keys: {
+        Row: { id: string; organization_id: string; label: string; key_prefix: string; key_hash: string; last_used_at: string | null; revoked_at: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null };
+        Insert: { id?: string; organization_id: string; label?: string; key_prefix: string; key_hash: string; last_used_at?: string | null; revoked_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
+        Update: { id?: string; organization_id?: string; label?: string; key_prefix?: string; key_hash?: string; last_used_at?: string | null; revoked_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
+        Relationships: [];
+      };
+      zapier_subscriptions: {
+        Row: { id: string; organization_id: string; event_type: string; target_url: string; zap_id: string | null; api_key_id: string | null; is_active: boolean; last_delivery_at: string | null; failure_count: number; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null };
+        Insert: { id?: string; organization_id: string; event_type: string; target_url: string; zap_id?: string | null; api_key_id?: string | null; is_active?: boolean; last_delivery_at?: string | null; failure_count?: number; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Update: { id?: string; organization_id?: string; event_type?: string; target_url?: string; zap_id?: string | null; api_key_id?: string | null; is_active?: boolean; last_delivery_at?: string | null; failure_count?: number; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Relationships: [];
+      };
+      zapier_deliveries: {
+        Row: { id: number; organization_id: string; subscription_id: string; domain_event_id: number; event_key: string; status: string; attempts: number; response_code: number | null; last_error: string | null; next_attempt_at: string; delivered_at: string | null; created_at: string };
+        Insert: { id?: number; organization_id: string; subscription_id: string; domain_event_id: number; event_key: string; status?: string; attempts?: number; response_code?: number | null; last_error?: string | null; next_attempt_at?: string; delivered_at?: string | null; created_at?: string };
+        Update: { id?: number; organization_id?: string; subscription_id?: string; domain_event_id?: number; event_key?: string; status?: string; attempts?: number; response_code?: number | null; last_error?: string | null; next_attempt_at?: string; delivered_at?: string | null; created_at?: string };
+        Relationships: [];
+      };
+      zapier_workflows: {
+        Row: { id: string; organization_id: string; template_key: string; title: string; event_type: string; app: string; status: string; zap_id: string | null; config: Json; last_synced_at: string | null; last_error: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null };
+        Insert: { id?: string; organization_id: string; template_key: string; title: string; event_type: string; app: string; status?: string; zap_id?: string | null; config?: Json; last_synced_at?: string | null; last_error?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Update: { id?: string; organization_id?: string; template_key?: string; title?: string; event_type?: string; app?: string; status?: string; zap_id?: string | null; config?: Json; last_synced_at?: string | null; last_error?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Relationships: [];
+      };
       weekly_scorecards: {
         Row: { id: string; organization_id: string; scorecard_id: string; period_start: string; period_end: string; status: string; submitted_by: string | null; submitted_at: string | null; reviewed_by: string | null; reviewed_at: string | null; summary: string | null; coach_feedback: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null };
         Insert: { id?: string; organization_id: string; scorecard_id: string; period_start: string; period_end: string; status?: string; submitted_by?: string | null; submitted_at?: string | null; reviewed_by?: string | null; reviewed_at?: string | null; summary?: string | null; coach_feedback?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null };
@@ -1031,6 +1073,13 @@ export type Database = {
       set_organization_status: { Args: { p_organization_id: string; p_status: string; p_reason?: string }; Returns: undefined };
       set_permission_override: { Args: { p_organization_id: string; p_user_id: string; p_permission_key: string; p_effect: string; p_reason?: string; p_expires_at?: string }; Returns: undefined };
       set_task_status: { Args: { p_task_id: string; p_status: string }; Returns: undefined };
+      zapier_org_for_key: { Args: { p_hash: string }; Returns: string | null };
+      zapier_subscribe: { Args: { p_org: string; p_event: string; p_url: string; p_zap?: string | null }; Returns: string };
+      zapier_unsubscribe: { Args: { p_org: string; p_subscription: string }; Returns: boolean };
+      zapier_claim: { Args: { p_limit?: number }; Returns: { delivery_id: number; organization_id: string; subscription_id: string; target_url: string; event_key: string; event_type: string; occurred_at: string; payload: Json; entity_type: string | null; entity_id: string | null; attempts: number }[] };
+      zapier_enqueue: { Args: { p_limit?: number }; Returns: number };
+      zapier_settle: { Args: { p_id: number; p_ok: boolean; p_code?: number | null; p_error?: string | null }; Returns: undefined };
+      issue_zapier_key: { Args: { p_organization_id: string; p_prefix: string; p_hash: string; p_label?: string }; Returns: Json };
       assign_coach: { Args: { p_onboarding_id: string; p_coach?: string | null }; Returns: Json };
       delete_lead: { Args: { p_lead_id: string }; Returns: Json };
       get_tracker: { Args: { p_slug: string; p_week?: string; p_user?: string }; Returns: Json };

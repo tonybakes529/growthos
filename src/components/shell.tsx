@@ -25,6 +25,7 @@ const MAIN: Def[] = [
 // people never need them. The weekly scorecard is no longer in the sidebar either; /scorecard still works.
 const MANAGE: Def[] = [
   { path: '/team', label: 'Team', needs: 'members.read' },
+  { path: '/connections', label: 'Connections', needs: 'connections.read' },
   { path: '/automations', label: 'Automations', needs: 'automations.read' },
   { path: '/activity', label: 'Activity', needs: 'organization.read' },
   { path: '/scorecard', label: 'Weekly scorecard', needs: 'kpis.read' },
