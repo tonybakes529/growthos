@@ -21,14 +21,11 @@ export function coursesTabs(orgSlug: string, canEdit: boolean) {
   ];
 }
 
-/** Growth: the weekly scorecard, the sales pipeline and the setters' assets, each shown only to people who can use it. */
-export function growthTabs(orgSlug: string, canKpis: boolean, canSales: boolean) {
+/** Sales and setters: the pipeline and the assets setters send. The weekly scorecard is its own page now. */
+export function salesTabs(orgSlug: string) {
   const base = `/w/${orgSlug}`;
   return [
-    ...(canKpis ? [{ key: 'scorecard', href: `${base}/scorecard`, label: 'Weekly scorecard' }] : []),
-    ...(canSales ? [
-      { key: 'pipeline', href: `${base}/pipeline`, label: 'Sales pipeline' },
-      { key: 'assets', href: `${base}/setter-assets`, label: 'Setter assets' },
-    ] : []),
+    { key: 'pipeline', href: `${base}/pipeline`, label: 'Sales pipeline' },
+    { key: 'assets', href: `${base}/setter-assets`, label: 'Setter assets' },
   ];
 }

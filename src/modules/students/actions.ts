@@ -21,7 +21,7 @@ export const lifecycle = (status: string, hasForm: boolean) => ({
 
 type Row = {
   id: string; program_id: string | null; form_id: string | null; contact_id: string | null; email: string;
-  user_id: string | null; status: string; invited_at: string; registered_at: string | null;
+  user_id: string | null; coach_id: string | null; status: string; invited_at: string; registered_at: string | null;
   started_at: string | null; completed_at: string | null; invitation_id: string | null;
 };
 type Named = {
@@ -30,7 +30,7 @@ type Named = {
 };
 type RowWithContact = Row & Named;
 
-const SELECT = 'id, program_id, form_id, contact_id, email, user_id, status, invited_at, registered_at, started_at, completed_at, invitation_id';
+const SELECT = 'id, program_id, form_id, contact_id, email, user_id, coach_id, status, invited_at, registered_at, started_at, completed_at, invitation_id';
 // The contact carries the name your team typed; the profile carries the name they signed up with. Either
 // beats showing a bare email, which is all the contact created alongside a membership starts with.
 const CONTACT = 'contact:contacts!customer_onboardings_organization_id_contact_id_fkey(first_name, last_name), user:users!customer_onboardings_user_id_fkey(profile:user_profiles!user_profiles_user_id_fkey(display_name))';
@@ -45,8 +45,9 @@ const nameOf = (email: string, n: Partial<Named>) =>
  * one, so nobody appears twice.
  */
 export const listStudents = action(
-  z.object({ orgSlug: zSlug, programId: zId.optional(), status: z.enum(STUDENT_STATUSES).optional() }),
-  async ({ orgSlug, programId, status }) => {
+  z.object({ orgSlug: zSlug, programId: zId.optional(), status: z.enum(STUDENT_STATUSES).optional(),
+             coachId: zId.optional(), unassigned: z.boolean().optional() }),
+  async ({ orgSlug, programId, status, coachId, unassigned }) => {
     const ctx = await requireOrg(orgSlug);
     assertCan(ctx, 'enrollments.read');
     // Contact names ride along as an embedded resource and the course list loads beside it: one round trip.
@@ -82,6 +83,7 @@ export const listStudents = action(
       const courses = all.filter((r) => r.program_id).map((r) => ps.find((x) => x.id === r.program_id)?.title ?? 'Removed course');
       return {
         id: p.id,
+        coachId: p.coach_id,
         programIds: all.map((r) => r.program_id).filter((id): id is string => !!id),
         email: p.email,
         userId: p.user_id,
@@ -99,7 +101,11 @@ export const listStudents = action(
     });
     // whoever still owes you answers first, then newest
     everyone.sort((a, b) => Number(b.unfinished) - Number(a.unfinished) || b.invited_at.localeCompare(a.invited_at));
-    const students = everyone.filter((s) => (!status || s.status === status) && (!programId || s.programIds.includes(programId)));
+    const students = everyone.filter((s) =>
+      (!status || s.status === status)
+      && (!programId || s.programIds.includes(programId))
+      && (!coachId || s.coachId === coachId)
+      && (!unassigned || !s.coachId));
 
     return {
       programs: ps.map((p) => ({ id: p.id, title: p.title, hasForm: !!(p.onboarding_form_id ?? intakeFormId) })),
@@ -265,6 +271,17 @@ export const removeStudent = action(z.object({ orgSlug: zSlug, onboardingId: zId
     email: string; name: string; onboardings: number; enrollments: number; lost_access: boolean;
   };
 });
+
+/** Who looks after this student. Null takes the coach off. Written to every record they hold here. */
+export const assignCoach = action(
+  z.object({ orgSlug: zSlug, onboardingId: zId, coachId: zId.nullable() }),
+  async ({ orgSlug, onboardingId, coachId }) => {
+    const ctx = await requireOrg(orgSlug);
+    assertCan(ctx, 'enrollments.update');
+    unwrap(await ctx.sb.schema('app').rpc('assign_coach', { p_onboarding_id: onboardingId, p_coach: coachId }));
+    return null;
+  },
+);
 
 /** Nudges a student who has a login and an unfinished form. Goes out now rather than on the nightly drain. */
 export const remindOnboarding = action(z.object({ orgSlug: zSlug, onboardingId: zId }), async ({ orgSlug, onboardingId }) => {

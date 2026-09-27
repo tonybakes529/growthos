@@ -219,3 +219,15 @@ table.tracker th:first-child, table.tracker td:first-child { text-align: left; w
 table.tracker th.today, table.tracker td.today { background: var(--accent-bg); }
 table.tracker th.total, table.tracker td.total { background: var(--line2); border-left: 2px solid var(--line); }
 table.tracker input { text-align: right; }
+
+/* Running the workspace, tucked by Sign out: the menu opens upward so it never runs off the bottom. */
+.side .foot .row { flex-wrap: nowrap; }
+.manage { position: relative; display: inline-flex; }
+.manage-list { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 40; min-width: 190px; padding: 6px;
+               display: flex; flex-direction: column; gap: 2px;
+               background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+               box-shadow: 0 -8px 30px rgba(0,0,0,.16); }
+.manage-list .menu-item { display: block; padding: 7px 10px; border-radius: 6px; font: 600 14px inherit;
+                          color: var(--ink); text-decoration: none; }
+.manage-list .menu-item:hover { background: var(--line2); }
+.manage-list .menu-item.on { background: var(--accent-bg); color: var(--accent); }

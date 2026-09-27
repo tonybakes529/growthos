@@ -275,9 +275,9 @@ export type Database = {
         Relationships: [];
       };
       customer_onboardings: {
-        Row: { id: string; organization_id: string; program_id: string | null; form_id: string | null; contact_id: string | null; email: string; user_id: string | null; invitation_id: string | null; purchase_id: string | null; status: string; invited_at: string; registered_at: string | null; started_at: string | null; completed_at: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null };
-        Insert: { id?: string; organization_id: string; program_id?: string | null; form_id?: string | null; contact_id?: string | null; email: string; user_id?: string | null; invitation_id?: string | null; purchase_id?: string | null; status?: string; invited_at?: string; registered_at?: string | null; started_at?: string | null; completed_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
-        Update: { id?: string; organization_id?: string; program_id?: string | null; form_id?: string | null; contact_id?: string | null; email?: string; user_id?: string | null; invitation_id?: string | null; purchase_id?: string | null; status?: string; invited_at?: string; registered_at?: string | null; started_at?: string | null; completed_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Row: { id: string; organization_id: string; program_id: string | null; form_id: string | null; contact_id: string | null; email: string; user_id: string | null; invitation_id: string | null; purchase_id: string | null; coach_id: string | null; status: string; invited_at: string; registered_at: string | null; started_at: string | null; completed_at: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; deleted_by: string | null };
+        Insert: { id?: string; organization_id: string; program_id?: string | null; form_id?: string | null; contact_id?: string | null; email: string; user_id?: string | null; invitation_id?: string | null; purchase_id?: string | null; coach_id?: string | null; status?: string; invited_at?: string; registered_at?: string | null; started_at?: string | null; completed_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
+        Update: { id?: string; organization_id?: string; program_id?: string | null; form_id?: string | null; contact_id?: string | null; email?: string; user_id?: string | null; invitation_id?: string | null; purchase_id?: string | null; coach_id?: string | null; status?: string; invited_at?: string; registered_at?: string | null; started_at?: string | null; completed_at?: string | null; created_at?: string; updated_at?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; deleted_by?: string | null };
         Relationships: [];
       };
       dashboard_templates: {
@@ -1031,6 +1031,7 @@ export type Database = {
       set_organization_status: { Args: { p_organization_id: string; p_status: string; p_reason?: string }; Returns: undefined };
       set_permission_override: { Args: { p_organization_id: string; p_user_id: string; p_permission_key: string; p_effect: string; p_reason?: string; p_expires_at?: string }; Returns: undefined };
       set_task_status: { Args: { p_task_id: string; p_status: string }; Returns: undefined };
+      assign_coach: { Args: { p_onboarding_id: string; p_coach?: string | null }; Returns: Json };
       delete_lead: { Args: { p_lead_id: string }; Returns: Json };
       get_tracker: { Args: { p_slug: string; p_week?: string; p_user?: string }; Returns: Json };
       install_student_tracker: { Args: { p_organization_id: string }; Returns: Json };

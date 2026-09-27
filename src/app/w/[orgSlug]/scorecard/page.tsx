@@ -1,7 +1,6 @@
 import { requireOrgPage, can } from '@/lib/auth/context';
 import { getWeeklyScorecard, submitWeeklyScorecard } from '@/modules/kpis/actions';
 import { done } from '@/components/flash';
-import { SubNav, growthTabs } from '@/components/subnav';
 import { Flash, PageHead, Pill, day } from '@/components/ui';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -11,14 +10,14 @@ export default async function Scorecard({ params, searchParams }: { params: Prom
   const ctx = await requireOrgPage(orgSlug);
   const path = `/w/${orgSlug}/scorecard`;
   if (!can(ctx, 'kpis.read')) {
-    return (<><PageHead sub={ctx.name} title="Growth · Weekly Scorecard" /><div className="card muted">You don&apos;t have access to the scorecard.</div></>);
+    return (<><PageHead sub={ctx.name} title="Weekly Scorecard" /><div className="card muted">You don&apos;t have access to the scorecard.</div></>);
   }
   const lastWeek = new Date(); lastWeek.setDate(lastWeek.getDate() - 7);
   const week = sp.week ?? iso(lastWeek);
   // one call finds the workspace's scorecard and loads the week with it
   const res = await getWeeklyScorecard({ orgSlug, weekOf: week });
   if (!res.ok) return <Flash err={res.error.message} />;
-  if (!res.data) return (<><PageHead sub={ctx.name} title="Growth · Weekly Scorecard" /><div className="card muted">No scorecard set up for this workspace yet. Your Growth OS team adds one from a template.</div></>);
+  if (!res.data) return (<><PageHead sub={ctx.name} title="Weekly Scorecard" /><div className="card muted">No scorecard set up for this workspace yet. Your Growth OS team adds one from a template.</div></>);
   const { rows, weekStart, submission, scorecard: card } = res.data;
   const cardId = card.id;
   const shift = (days: number) => { const d = new Date(`${weekStart}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return iso(d); };
@@ -40,7 +39,6 @@ export default async function Scorecard({ params, searchParams }: { params: Prom
         <a className="btn" href={`${path}?week=${shift(-7)}`}>← Previous week</a>
         <a className="btn" href={`${path}?week=${shift(7)}`}>Next week →</a>
       </PageHead>
-      <SubNav items={growthTabs(orgSlug, true, can(ctx, 'sales.read'))} current="scorecard" />
       <Flash msg={sp.msg} err={sp.err} />
       {submission && <div className="muted">Submitted {day(submission.submitted_at)} · status <Pill value={submission.status === 'submitted' ? 'on_track' : submission.status} label={submission.status} /></div>}
       <form action={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
