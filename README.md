@@ -4,6 +4,7 @@ Backend foundation for a multi-client coaching + growth operating platform: priv
 
 - **Architecture, role matrix, RLS strategy, workflows, phases, risks:** [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - **Every table and column (generated from the schema):** [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)
+- **Connecting a workspace's own Zapier account, and what is left to configure:** [`docs/ZAPIER_SETUP.md`](docs/ZAPIER_SETUP.md)
 
 ## What's in the box
 

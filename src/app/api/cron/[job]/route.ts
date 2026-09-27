@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { requireEnv } from '@/lib/env';
 import { emitScheduledEvents, processDomainEvents } from '@/modules/automations/worker';
 import { drainEmailOutbox } from '@/modules/email/outbox';
+import { deliverToZapier } from '@/modules/connections/delivery';
 
 export const runtime = 'nodejs';
 
@@ -14,7 +15,7 @@ const authorized = (req: Request) => {
 };
 
 /**
- * /api/cron/events  – every minute: automations + delayed steps + email outbox
+ * /api/cron/events  – every minute: automations + delayed steps + email outbox + Zapier delivery
  * /api/cron/daily   – once a day: overdue/inactive checks + health scores
  */
 export async function GET(req: Request, { params }: { params: Promise<{ job: string }> }) {
@@ -24,7 +25,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ job: str
     case 'events': {
       const events = await processDomainEvents();
       const email = await drainEmailOutbox();
-      return NextResponse.json({ events, email });
+      // separate from automations on purpose: a Zapier outage must not stall the rest
+      const zapier = await deliverToZapier().catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
+      return NextResponse.json({ events, email, zapier });
     }
     case 'daily': {
       const scheduled = await emitScheduledEvents();

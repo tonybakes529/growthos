@@ -10,6 +10,12 @@ const schema = z.object({
   CRON_SECRET: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
+  // Zapier. The client id and secret come from a Zapier integration that has been published to their
+  // App Directory; until then the Connections page shows "Setup required" rather than pretending.
+  ZAPIER_CLIENT_ID: z.string().optional(),
+  ZAPIER_CLIENT_SECRET: z.string().optional(),
+  // 32 bytes, base64. Seals Zapier tokens before they touch the database.
+  ZAPIER_TOKEN_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof schema>;
@@ -29,6 +35,9 @@ export function getEnv(): Env {
     CRON_SECRET: process.env.CRON_SECRET,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     EMAIL_FROM: process.env.EMAIL_FROM,
+    ZAPIER_CLIENT_ID: process.env.ZAPIER_CLIENT_ID,
+    ZAPIER_CLIENT_SECRET: process.env.ZAPIER_CLIENT_SECRET,
+    ZAPIER_TOKEN_KEY: process.env.ZAPIER_TOKEN_KEY,
   });
   return cached;
 }
