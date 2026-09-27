@@ -197,10 +197,9 @@ div.f input[type=file] { font-weight: 400; }
             padding: 0 8px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--muted);
             font: 700 15px inherit; line-height: 1; cursor: pointer; }
 .menu-btn:hover, .menu-btn[aria-expanded="true"] { border-color: var(--line); background: var(--card); color: var(--ink); }
-.menu-list { position: absolute; top: calc(100% + 4px); z-index: 30; min-width: 220px; padding: 6px;
+.menu-list { position: fixed; z-index: 60; min-width: 220px; padding: 6px;
              display: flex; flex-direction: column; gap: 2px; text-align: left;
              background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.14); }
-.menu-list.end { right: 0; } .menu-list.start { left: 0; }
 .menu-list form { display: flex; flex-direction: column; gap: 6px; margin: 0; }
 /* every item looks the same whether it is a link, a submit button or the button inside a modal */
 .menu-list .menu-item, .menu-list .btn {
