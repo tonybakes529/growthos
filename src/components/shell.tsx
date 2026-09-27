@@ -14,22 +14,26 @@ type Def = { path: string; label: string; needs?: Permission; unless?: Permissio
 // enforce the same permissions again; this only stops people being sent to dead ends.
 const MAIN: Def[] = [
   { path: '', label: 'Home' },
-  { path: '/students', label: 'Students', needs: 'enrollments.read', also: ['/customers'] },
+  // the students list lives under Coaches rather than beside it, so there is one door to your people
+  { path: '/coaches', label: 'Coaches', needs: 'enrollments.read', also: ['/students', '/customers'] },
   { path: '/programs', label: 'Courses', also: ['/lessons', '/onboarding'] },
+  { path: '/pipeline', label: 'Sales / Setters', needs: 'sales.read', also: ['/setter-assets'] },
   { path: '/sops', label: 'SOPs', needs: 'sops.read' },
-  { path: '/scorecard', label: 'Growth', needs: 'kpis.read', also: ['/pipeline', '/setter-assets'] },
-  // people with sales access but no KPI access still reach Growth, landing on the pipeline
-  { path: '/pipeline', label: 'Growth', needs: 'sales.read', unless: 'kpis.read', also: ['/setter-assets'] },
   { path: '/tasks', label: 'Tasks' },
 ];
+// Running the workspace rather than working in it. These sit in a menu by Sign out, because most
+// people never need them. The weekly scorecard is no longer in the sidebar either; /scorecard still works.
 const MANAGE: Def[] = [
   { path: '/team', label: 'Team', needs: 'members.read' },
   { path: '/automations', label: 'Automations', needs: 'automations.read' },
   { path: '/activity', label: 'Activity', needs: 'organization.read' },
+  { path: '/scorecard', label: 'Weekly scorecard', needs: 'kpis.read' },
 ];
 const LEARNER: Def[] = [
   { path: '', label: 'Home' },
   { path: '/programs', label: 'My Courses', also: ['/lessons'] },
+  // no permission gate: a student holds none, and giving them one would stop them being a learner
+  { path: '/tracker', label: 'My Numbers' },
   { path: '/tasks', label: 'My Tasks' },
 ];
 
@@ -49,9 +53,11 @@ export async function Shell({ children, orgSlug }: { children: ReactNode; orgSlu
     orgSlug ? requireOrg(orgSlug).catch(() => null) : null,
   ]);
   if (!session) redirect('/login');
+  const learner = ctx ? isLearner(ctx) : false;
   const groups: NavGroup[] = !ctx ? []
-    : isLearner(ctx) ? [{ items: build(LEARNER, ctx) }]
-    : [{ items: build(MAIN, ctx) }, { label: 'Manage', items: build(MANAGE, ctx) }].filter((g) => g.items.length);
+    : learner ? [{ items: build(LEARNER, ctx) }]
+    : [{ items: build(MAIN, ctx) }];
+  const manage = ctx && !learner ? build(MANAGE, ctx) : [];
   const workspaces = ws.ok
     ? ws.data.map((w) => ({ slug: w.slug!, name: w.name!, kind: w.kind!, role: w.access_type === 'super_admin' ? '' : (w.role_key ?? w.access_type ?? '').replace(/_/g, ' ') }))
     : [];
@@ -63,7 +69,7 @@ export async function Shell({ children, orgSlug }: { children: ReactNode; orgSlu
     <div className="shell">
       <SideNav email={session.email ?? ''} roleLabel={roleLabel}
                isStaff={session.ctx.is_platform_staff || session.ctx.is_super_admin}
-               workspaces={workspaces} currentSlug={orgSlug} groups={groups} />
+               workspaces={workspaces} currentSlug={orgSlug} groups={groups} manage={manage} />
       <main className="page">{children}</main>
     </div>
   );

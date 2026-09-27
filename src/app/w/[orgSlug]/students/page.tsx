@@ -4,8 +4,8 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireOrgPage, can } from '@/lib/auth/context';
 import { getEnv } from '@/lib/env';
-import { addCustomer, listStudents, nameStudent, removeStudent, remindOnboarding, STUDENT_STATUSES } from '@/modules/students/actions';
-import { addMemberWithLogin } from '@/modules/memberships/actions';
+import { addCustomer, assignCoach, listStudents, nameStudent, removeStudent, remindOnboarding, STUDENT_STATUSES } from '@/modules/students/actions';
+import { addMemberWithLogin, listMembers } from '@/modules/memberships/actions';
 import { done } from '@/components/flash';
 import { Menu } from '@/components/menu';
 import { Flash, PageHead, Pill, Stat, day } from '@/components/ui';
@@ -23,7 +23,7 @@ async function showOnce(name: string, path: string, value: string) {
 }
 
 export default async function Students({ params, searchParams }: {
-  params: Promise<{ orgSlug: string }>; searchParams: Promise<{ course?: string; status?: string; add?: string; msg?: string; err?: string }>;
+  params: Promise<{ orgSlug: string }>; searchParams: Promise<{ course?: string; status?: string; coach?: string; add?: string; msg?: string; err?: string }>;
 }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
   const ctx = await requireOrgPage(orgSlug);
@@ -33,7 +33,19 @@ export default async function Students({ params, searchParams }: {
   }
   const status = STUDENT_STATUSES.find((s) => s === sp.status);
   const programId = sp.course && /^[0-9a-f-]{36}$/i.test(sp.course) ? sp.course : undefined;
-  const [all, jar] = await Promise.all([listStudents({ orgSlug, programId, status }), cookies()]);
+  const coachFilter = sp.coach && /^[0-9a-f-]{36}$/i.test(sp.coach) ? sp.coach : undefined;
+  const [all, team, jar] = await Promise.all([
+    listStudents({ orgSlug, programId, status, coachId: coachFilter, unassigned: sp.coach === 'none' }),
+    listMembers({ orgSlug }),
+    cookies(),
+  ]);
+  // anyone on the team who is not themselves a student can be someone's coach
+  const coaches = team.ok ? [
+    ...team.data.members.filter((m) => m.role?.key !== 'student')
+      .map((m) => ({ userId: m.userId, name: m.profile?.display_name ?? m.email })),
+    ...team.data.staff.filter((s) => !team.data.members.some((m) => m.userId === s.userId))
+      .map((s) => ({ userId: s.userId, name: s.profile?.display_name ?? s.email })),
+  ] : [];
   const data = all.ok ? all.data : { programs: [], students: [], hasIntakeForm: false, counts: { invited: 0, registered: 0, in_progress: 0, completed: 0 } };
   const rows = sp.course && !programId ? [] : data.students;
   const link = jar.get(LINK_COOKIE)?.value;
@@ -47,6 +59,7 @@ export default async function Students({ params, searchParams }: {
   const canAddLogin = can(ctx, 'enrollments.create') && can(ctx, 'members.create');
   const canRemove = can(ctx, 'enrollments.delete');
   const canRemind = can(ctx, 'enrollments.update');
+  const canTracker = can(ctx, 'kpis.read');
 
   async function add(form: FormData) {
     'use server';
@@ -97,6 +110,13 @@ export default async function Students({ params, searchParams }: {
       (d) => d.emailConfigured
         ? `Reminder sent to ${d.to}.`
         : `Reminder queued for ${d.to}. Email is not set up here, so it will go out once it is.`);
+  }
+
+  async function setCoach(form: FormData) {
+    'use server';
+    const coach = String(form.get('coach') ?? '');
+    done(path, await assignCoach({ orgSlug, onboardingId: String(form.get('id')), coachId: coach || null }),
+      coach ? 'Coach assigned' : 'Coach removed');
   }
 
   const qs = (o: { course?: string; status?: string }) => {
@@ -195,11 +215,12 @@ export default async function Students({ params, searchParams }: {
 
       <div className="card tablewrap">
         <table>
-          <thead><tr><th>Student</th><th>Courses</th><th>Account</th><th>Onboarding</th><th>Added</th><th>Completed</th><th /></tr></thead>
+          <thead><tr><th>Student</th><th>Coach</th><th>Courses</th><th>Account</th><th>Onboarding</th><th>Added</th><th>Completed</th><th /></tr></thead>
           <tbody>
             {rows.map((s) => (
               <tr key={s.id}>
                 <td><Link href={`${path}/${s.id}`}><b>{s.name}</b></Link>{s.name !== s.email && <div className="muted">{s.email}</div>}</td>
+                <td>{coaches.find((c) => c.userId === s.coachId)?.name ?? <span className="muted">Nobody yet</span>}</td>
                 <td className="wrap">{s.courses.length ? s.courses.join(', ') : <span className="muted">No course</span>}</td>
                 <td><Pill value={s.status === 'invited' ? 'pending' : 'active'} label={s.account} /></td>
                 <td>
@@ -209,8 +230,25 @@ export default async function Students({ params, searchParams }: {
                 <td>{day(s.invited_at)}</td>
                 <td>{day(s.completed_at)}</td>
                 <td>
-                  {(canRemind || canRemove) && (
+                  {(canRemind || canRemove || canTracker) && (
                     <Menu label={`Manage ${s.name}`}>
+                      {canTracker && !!s.userId && (
+                        <Link className="menu-item" href={`${path}/${s.id}/tracker`}>Open their tracker</Link>
+                      )}
+                      {canRemove && !!coaches.length && (
+                        <Modal small label="Assign a coach" title={`Who looks after ${s.name}?`}>
+                          <form action={setCoach}>
+                            <input type="hidden" name="id" value={s.id} />
+                            <label className="f">Coach
+                              <select name="coach" defaultValue={s.coachId ?? ''}>
+                                <option value="">Nobody yet</option>
+                                {coaches.map((c) => <option key={c.userId} value={c.userId}>{c.name}</option>)}
+                              </select>
+                            </label>
+                            <div><button className="btn primary" type="submit">Save</button></div>
+                          </form>
+                        </Modal>
+                      )}
                       {canRemind && !!s.userId && s.unfinished && (
                         <form action={remind}><input type="hidden" name="id" value={s.id} />
                           <button className="menu-item" type="submit">Send reminder</button></form>
@@ -238,7 +276,7 @@ export default async function Students({ params, searchParams }: {
               </tr>
             ))}
             {!rows.length && (
-              <tr><td colSpan={7} className="muted">
+              <tr><td colSpan={8} className="muted">
                 {data.students.length || Object.values(data.counts).some((n) => n > 0)
                   ? 'No students match this filter.'
                   : 'No students yet. Use "Add student", or they appear here automatically when someone buys a course.'}

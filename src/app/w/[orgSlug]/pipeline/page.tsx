@@ -5,7 +5,7 @@ import { getGrowthMetrics } from '@/modules/reports/actions';
 import { done } from '@/components/flash';
 import { Flash, PageHead, Stat, money } from '@/components/ui';
 import { Modal } from '@/components/modal';
-import { SubNav, growthTabs } from '@/components/subnav';
+import { SubNav, salesTabs } from '@/components/subnav';
 
 export default async function Pipeline({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams: Promise<{ msg?: string; err?: string }> }) {
   const [{ orgSlug }, sp] = await Promise.all([params, searchParams]);
@@ -50,7 +50,7 @@ export default async function Pipeline({ params, searchParams }: { params: Promi
 
   return (
     <>
-      <PageHead sub={ctx.name} title="Growth · Sales pipeline">
+      <PageHead sub={ctx.name} title="Sales · Pipeline">
         {can(ctx, 'custom_fields.update') && <Link className="btn" href={`${path}/sheet`}>Edit call sheet</Link>}
         {can(ctx, 'sales.create') && (
           <Modal label="+ New deal" title="New deal" primary open={!!sp.err}>
@@ -66,7 +66,7 @@ export default async function Pipeline({ params, searchParams }: { params: Promi
           </Modal>
         )}
       </PageHead>
-      <SubNav items={growthTabs(orgSlug, can(ctx, 'kpis.read'), true)} current="pipeline" />
+      <SubNav items={salesTabs(orgSlug)} current="pipeline" />
       <Flash msg={sp.msg} err={sp.err} />
       {!!m.length && (
         <div className="grid g5">
