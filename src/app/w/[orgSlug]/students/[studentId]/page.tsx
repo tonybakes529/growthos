@@ -50,6 +50,8 @@ export default async function Student({ params, searchParams }: {
       <PageHead sub={ctx.name} title={c.name}>
         <Pill value={r.status === 'invited' ? 'pending' : 'active'} label={c.account} />
         <Pill value={r.status === 'completed' ? 'completed' : r.status === 'in_progress' ? 'in_progress' : 'none'} label={`Onboarding: ${c.onboarding.toLowerCase()}`} />
+        {/* their numbers are half of what this page is for, so they get a door here and not only in the row menu */}
+        <Link className="btn" href={`${path}/tracker`}>Their tracker</Link>
       </PageHead>
       <Flash msg={sp.msg} err={sp.err} />
 
